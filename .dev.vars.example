@@ -1,0 +1,7 @@
+# Copie para .dev.vars para rodar localmente (npm run dev). Nunca faça commit de .dev.vars.
+# Em desenvolvimento, o KV é local: crie sessões de teste com
+#   npx wrangler kv key put --binding KV --local "msess:sessao-de-teste-membro" '{"email":"jurado@exemplo.com","types":["Professor(a)"]}'
+#   npx wrangler kv key put --binding KV --local "asess:sessao-de-teste-admin" '{"email":"admin@exemplo.com","role":"admin"}'
+# e defina os cookies m_session / a_session no navegador (DevTools → Application → Cookies).
+AMBIENTE=dev
+BLOG_ORIGIN=https://blog.updance.workers.dev

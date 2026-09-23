@@ -1,0 +1,13 @@
+{
+  "name": "UpDance Festival · Jurados",
+  "short_name": "UDX Festival",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#02021a",
+  "theme_color": "#02021a",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "/icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
