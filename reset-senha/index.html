@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#02021a">
+  <title>Nova senha · UpDance Festival</title>
+  <link rel="icon" href="/images/icons/udx-icon.ico" type="image/x-icon">
+  <script src="/js/tema.js"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Playfair+Display:ital@1&family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@6.9.96/css/materialdesignicons.min.css">
+  <link rel="stylesheet" href="/src/css/udx-tokens.css">
+  <link rel="stylesheet" href="/src/css/festival.css">
+  <script type="module" src="/src/reset-senha/reset.js"></script>
+</head>
+<body class="page-festival">
+  <section class="tela tela-centro">
+    <div class="cartao-acesso">
+      <span class="udx-marca"><img class="udx-marca-icone" src="/images/icons/udx-icon.png" alt="Up Dance Xperience">
+        <span class="udx-marca-texto"><span class="l1">UpDance</span><span class="l2">Festival · Jurados</span></span></span>
+      <h1>Nova <em>senha</em></h1>
+      <p id="reset-texto" class="explicacao">Crie sua nova senha: pelo menos 8 caracteres, com letras e números.</p>
+      <form id="form-reset" class="form-acesso" autocomplete="on">
+        <label for="campo-nova">Nova senha</label>
+        <div class="campo-icone"><i class="mdi mdi-lock-reset"></i>
+          <input id="campo-nova" type="password" required minlength="8" maxlength="128" autocomplete="new-password"></div>
+        <label for="campo-confirma">Repita a nova senha</label>
+        <div class="campo-icone"><i class="mdi mdi-lock-check-outline"></i>
+          <input id="campo-confirma" type="password" required minlength="8" maxlength="128" autocomplete="new-password"></div>
+        <button id="btn-salvar" type="submit" class="btn btn-primario"><i class="mdi mdi-content-save-outline"></i> Salvar nova senha</button>
+        <p id="msg-reset" class="mensagem" role="alert"></p>
+      </form>
+      <a id="link-app" class="btn btn-primario" href="/" hidden><i class="mdi mdi-login"></i> Entrar no app</a>
+    </div>
+  </section>
+</body>
+</html>

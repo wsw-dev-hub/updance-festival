@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#02021a">
+  <title>Admin · UpDance Festival</title>
+  <link rel="icon" href="/images/icons/udx-icon.ico" type="image/x-icon">
+  <script src="/js/tema.js"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Playfair+Display:ital@1&family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@6.9.96/css/materialdesignicons.min.css">
+  <link rel="stylesheet" href="/src/css/udx-tokens.css">
+  <link rel="stylesheet" href="/src/admin/admin.css">
+  <script type="module" src="/src/admin/admin.js"></script>
+</head>
+<body class="page-admin">
+<header class="admin-topbar">
+  <span class="udx-marca"><img class="udx-marca-icone" src="/images/icons/udx-icon.png" alt="Up Dance Xperience">
+    <span class="udx-marca-texto"><span class="l1">UpDance</span><span class="l2">Festival · Admin</span></span></span>
+  <div class="topbar-acoes">
+    <span id="adminChip" class="type-chip" hidden><i class="mdi mdi-shield-account"></i><span id="adminEmail"></span></span>
+    <button id="btnTema" class="btn btn-icone" type="button" aria-label="Alternar tema" title="Tema claro/escuro"><i class="mdi mdi-theme-light-dark"></i><span class="rotulo-alt">Tema</span></button>
+    <button id="btnSair" class="btn btn-icone" type="button" aria-label="Sair" title="Sair"><i class="mdi mdi-logout"></i><span class="rotulo-alt">Sair</span></button>
+  </div>
+</header>
+
+<main class="admin-main">
+  <nav class="tabs tabs-principal" role="tablist" aria-label="Seções">
+    <button class="tab is-active" data-secao="eventos" role="tab"><i class="mdi mdi-calendar-star"></i> Eventos</button>
+    <button class="tab" data-secao="jurados" role="tab"><i class="mdi mdi-account-star"></i> Jurados <span id="c-jurados-total" class="contador"></span></button>
+    <button class="tab" data-secao="grupos" role="tab"><i class="mdi mdi-account-group"></i> Grupos <span id="c-grupos" class="contador"></span></button>
+    <button class="tab" data-secao="admins" role="tab"><i class="mdi mdi-shield-account"></i> Administradores</button>
+    <button class="tab" data-secao="conta" role="tab"><i class="mdi mdi-account-cog"></i> Minha conta</button>
+    <button class="tab" data-secao="auditoria" role="tab"><i class="mdi mdi-shield-search"></i> Auditoria</button>
+  </nav>
+
+  <p id="mensagem" class="mensagem" role="status" aria-live="polite"></p>
+
+  <!-- Senha provisória (aparece uma única vez) -->
+  <div id="caixa-senha" class="card caixa-senha" hidden role="alert">
+    <div>
+      <strong id="caixa-senha-titulo"></strong>
+      <p class="muted">Envie ao usuário por um canal seguro. Ela não será mostrada de novo; no primeiro acesso ele cria a própria senha.</p>
+    </div>
+    <code id="caixa-senha-valor"></code>
+    <div class="linha">
+      <button id="btn-copiar-senha" class="btn btn-sec" type="button"><i class="mdi mdi-content-copy"></i> Copiar</button>
+      <button id="btn-fechar-senha" class="btn btn-sec" type="button"><i class="mdi mdi-close"></i> Fechar</button>
+    </div>
+  </div>
+
+  <!-- ============================ EVENTOS ============================ -->
+  <section id="secao-eventos" class="secao">
+    <section class="card">
+      <div class="card-head"><h1>Comentários dos <em>jurados</em></h1></div>
+      <div class="linha">
+        <select id="sel-evento" aria-label="Evento"></select>
+        <button id="btn-atualizar" class="btn btn-sec" type="button"><i class="mdi mdi-refresh"></i> Atualizar</button>
+        <button id="btn-editar-evento" class="btn btn-sec" type="button" hidden><i class="mdi mdi-pencil"></i> Editar evento</button>
+      </div>
+      <div id="link-jurados" class="destaque" hidden>
+        <span><i class="mdi mdi-link-variant"></i> Link do app para os jurados:</span>
+        <code id="link-jurados-url"></code>
+        <button id="btn-copiar-link" class="btn btn-sec" type="button"><i class="mdi mdi-content-copy"></i> Copiar</button>
+      </div>
+      <details id="det-evento">
+        <summary><i class="mdi mdi-plus-circle-outline"></i> <span id="det-evento-titulo">Novo evento</span></summary>
+        <form id="form-evento" class="grade">
+          <label>Nome <input name="nome" required maxlength="120" placeholder="Festival UpDance 2026"></label>
+          <label>Data <input name="data" type="date" required></label>
+          <label>Local <input name="local" maxlength="160" placeholder="Teatro, cidade"></label>
+          <label>Jurados podem gravar a partir de <input name="abre_em" type="datetime-local"></label>
+          <label>Encerramento <input name="fecha_em" type="datetime-local"></label>
+          <label>Duração máxima por comentário (min) <input name="duracao_max_min" type="number" min="1" max="30" value="8"></label>
+          <label class="check"><input name="anonimizar_jurados" type="checkbox"> Participantes veem "Jurado 1, 2…" em vez do nome</label>
+          <div class="linha">
+            <button type="submit" class="btn btn-hot" id="btn-salvar-evento">Criar evento</button>
+            <button type="button" class="btn btn-sec" id="btn-cancelar-evento" hidden>Cancelar edição</button>
+          </div>
+        </form>
+      </details>
+    </section>
+
+    <div id="conteudo-evento" hidden>
+      <nav class="tabs" role="tablist" aria-label="Evento">
+        <button class="tab is-active" data-tab="gravacoes" role="tab"><i class="mdi mdi-waveform"></i> Gravações <span id="c-gravacoes" class="contador"></span></button>
+        <button class="tab" data-tab="escala" role="tab"><i class="mdi mdi-gavel"></i> Escala de jurados <span id="c-escala" class="contador"></span></button>
+        <button class="tab" data-tab="coreografias" role="tab"><i class="mdi mdi-human-female-dance"></i> Coreografias <span id="c-coreografias" class="contador"></span></button>
+        <button class="tab" data-tab="auditoria-evento" role="tab"><i class="mdi mdi-history"></i> Auditoria do evento</button>
+      </nav>
+
+      <section id="panel-gravacoes" class="card panel">
+        <div class="card-head"><h2>Gravações</h2><span id="resumo-gravacoes" class="muted"></span></div>
+        <audio id="player" controls hidden></audio>
+        <div class="tabela-rolagem"><table>
+          <thead><tr><th>Nº</th><th>Coreografia</th><th>Jurado</th><th>Status</th><th>Duração</th><th>Ações</th></tr></thead>
+          <tbody id="tb-gravacoes"></tbody>
+        </table></div>
+      </section>
+
+      <section id="panel-escala" class="card panel" hidden>
+        <div class="card-head"><h2>Escala de jurados</h2></div>
+        <p class="muted">Escolha entre os jurados cadastrados (seção <strong>Jurados</strong>). A ordem define o nome anonimizado (Jurado 1, 2…).</p>
+        <form id="form-escala" class="linha">
+          <select id="sel-jurado-escala" aria-label="Jurado" required></select>
+          <button type="submit" class="btn btn-hot"><i class="mdi mdi-account-plus"></i> Escalar</button>
+        </form>
+        <div class="tabela-rolagem"><table>
+          <thead><tr><th>#</th><th>Jurado</th><th>E-mail</th><th>Situação</th><th>Ações</th></tr></thead>
+          <tbody id="tb-escala"></tbody>
+        </table></div>
+      </section>
+
+      <section id="panel-coreografias" class="card panel" hidden>
+        <div class="card-head"><h2>Coreografias</h2></div>
+        <form id="form-coreografia" class="grade grade-compacta">
+          <label>Nº <input name="numero" type="number" min="0" required></label>
+          <label>Nome <input name="nome" required maxlength="200"></label>
+          <label>Grupo <select name="grupo_id" id="sel-grupo-coreografia"></select></label>
+          <label>Categoria <input name="categoria" maxlength="100"></label>
+          <button type="submit" class="btn btn-hot"><i class="mdi mdi-plus"></i> Salvar</button>
+        </form>
+        <details>
+          <summary><i class="mdi mdi-file-upload-outline"></i> Importar CSV</summary>
+          <p class="muted">Colunas: <code>numero;nome;grupo;categoria</code>. Grupos que ainda não existem são criados. Números repetidos são atualizados.</p>
+          <textarea id="csv" rows="5" placeholder="numero;nome;grupo;categoria&#10;1;Bolero de Ravel;Cia. Movimento;Contemporâneo"></textarea>
+          <div class="linha">
+            <input id="arquivo-csv" type="file" accept=".csv,text/csv">
+            <button id="btn-importar" class="btn btn-hot" type="button">Importar</button>
+          </div>
+        </details>
+        <div class="tabela-rolagem"><table>
+          <thead><tr><th>Nº</th><th>Nome</th><th>Grupo</th><th>Categoria</th><th>Entrega ao participante</th></tr></thead>
+          <tbody id="tb-coreografias"></tbody>
+        </table></div>
+      </section>
+
+      <section id="panel-auditoria-evento" class="card panel" hidden>
+        <div class="card-head"><h2>Auditoria do evento</h2></div>
+        <div class="tabela-rolagem"><table>
+          <thead><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Alvo</th><th>Detalhes</th></tr></thead>
+          <tbody id="tb-auditoria-evento"></tbody>
+        </table></div>
+      </section>
+    </div>
+  </section>
+
+  <!-- ============================ JURADOS ============================ -->
+  <section id="secao-jurados" class="secao card" hidden>
+    <div class="card-head"><h2>Jurados</h2><span class="muted">Contas de acesso ao app. Cada jurado pode atuar em vários eventos.</span></div>
+    <form id="form-jurado" class="grade grade-compacta">
+      <label>Nome <input name="nome" required maxlength="120"></label>
+      <label>E-mail <input name="email" type="email" required maxlength="254"></label>
+      <label>Telefone <input name="telefone" maxlength="40" placeholder="opcional"></label>
+      <button type="submit" class="btn btn-hot"><i class="mdi mdi-account-plus"></i> Cadastrar</button>
+    </form>
+    <div class="tabela-rolagem"><table>
+      <thead><tr><th>Nome</th><th>E-mail</th><th>Telefone</th><th>Eventos</th><th>Situação</th><th>Ações</th></tr></thead>
+      <tbody id="tb-jurados"></tbody>
+    </table></div>
+  </section>
+
+  <!-- ============================ GRUPOS ============================ -->
+  <section id="secao-grupos" class="secao card" hidden>
+    <div class="card-head"><h2>Grupos</h2><span class="muted">Escolas, companhias e grupos participantes.</span></div>
+    <form id="form-grupo" class="grade grade-compacta">
+      <input type="hidden" name="id">
+      <label>Nome <input name="nome" required maxlength="160"></label>
+      <label>Cidade <input name="cidade" maxlength="120"></label>
+      <label>Responsável <input name="responsavel" maxlength="120"></label>
+      <label>E-mail <input name="email" type="email" maxlength="254"></label>
+      <label>Telefone <input name="telefone" maxlength="40"></label>
+      <div class="linha">
+        <button type="submit" class="btn btn-hot" id="btn-salvar-grupo"><i class="mdi mdi-plus"></i> Cadastrar</button>
+        <button type="button" class="btn btn-sec" id="btn-cancelar-grupo" hidden>Cancelar edição</button>
+      </div>
+    </form>
+    <div class="tabela-rolagem"><table>
+      <thead><tr><th>Nome</th><th>Cidade</th><th>Responsável</th><th>Contato</th><th>Coreografias</th><th>Ações</th></tr></thead>
+      <tbody id="tb-grupos"></tbody>
+    </table></div>
+  </section>
+
+  <!-- ============================ ADMINS ============================ -->
+  <section id="secao-admins" class="secao card" hidden>
+    <div class="card-head"><h2>Administradores</h2><span class="muted">Quem tem acesso a esta área.</span></div>
+    <form id="form-admin" class="grade grade-compacta">
+      <label>Nome <input name="nome" required maxlength="120"></label>
+      <label>E-mail <input name="email" type="email" required maxlength="254"></label>
+      <button type="submit" class="btn btn-hot"><i class="mdi mdi-shield-plus"></i> Adicionar</button>
+    </form>
+    <div class="tabela-rolagem"><table>
+      <thead><tr><th>Nome</th><th>E-mail</th><th>Último acesso</th><th>Situação</th><th>Ações</th></tr></thead>
+      <tbody id="tb-admins"></tbody>
+    </table></div>
+  </section>
+
+  <!-- ============================ CONTA ============================ -->
+  <section id="secao-conta" class="secao card" hidden>
+    <div class="card-head"><h2>Minha conta</h2></div>
+    <p><strong id="conta-nome"></strong> · <span id="conta-email" class="muted"></span></p>
+    <form id="form-conta-senha" class="grade grade-compacta" autocomplete="on">
+      <input type="email" id="conta-usuario" autocomplete="username" hidden>
+      <label>Senha atual <input name="atual" type="password" required autocomplete="current-password"></label>
+      <label>Nova senha <input name="nova" type="password" required minlength="8" autocomplete="new-password"></label>
+      <label>Repita a nova senha <input name="confirma" type="password" required minlength="8" autocomplete="new-password"></label>
+      <button type="submit" class="btn btn-hot"><i class="mdi mdi-lock-reset"></i> Trocar senha</button>
+    </form>
+    <p class="muted">Trocar a senha encerra suas sessões em outros aparelhos.</p>
+  </section>
+
+  <!-- ============================ AUDITORIA ============================ -->
+  <section id="secao-auditoria" class="secao card" hidden>
+    <div class="card-head"><h2>Auditoria</h2><span class="muted">Acessos e alterações de contas (ações de eventos ficam em cada evento).</span></div>
+    <div class="tabela-rolagem"><table>
+      <thead><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Alvo</th><th>IP</th></tr></thead>
+      <tbody id="tb-auditoria"></tbody>
+    </table></div>
+  </section>
+</main>
+</body>
+</html>

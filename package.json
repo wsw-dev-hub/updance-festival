@@ -2,17 +2,26 @@
   "name": "updance-festival",
   "version": "1.0.0",
   "private": true,
-  "description": "UpDance Festival — gravação de comentários de jurados (worker do ecossistema UpDance, banco updance-festival_db)",
+  "description": "UpDance Festival — gravação de comentários de jurados (Vite + Cloudflare Worker, D1 updance-festival_db, KV, R2)",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "vite",
+    "dev:worker": "vite build && wrangler dev --port 8787",
+    "build": "vite build",
+    "preview": "vite build && wrangler dev --port 8787",
     "db:local": "wrangler d1 migrations apply updance-festival_db --local",
-    "cf:publicar": "node scripts/cf-publicar.mjs"
+    "verificar": "node scripts/verificar-sintaxe.mjs && vite build && wrangler deploy --dry-run --outdir .wrangler/dry-run",
+    "cf:publicar": "vite build && node scripts/cf-publicar.mjs"
   },
   "devDependencies": {
+    "vite": "^7.3.6",
+    "vite-plugin-mkcert": "^2.1.0",
     "wrangler": "^4.136.3"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "worker-mailer": "^1.2.1"
   }
 }

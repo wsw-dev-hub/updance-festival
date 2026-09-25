@@ -1,0 +1,50 @@
+# UpDance Festival — Worker (API + autenticação) + assets gerados pelo Vite (dist/).
+# Build:   npm run build      (vite build → dist/)
+# Local:   npm run dev:worker (wrangler dev sobre dist/)  +  npm run dev (Vite com HTTPS e proxy)
+# Deploy:  GitHub Actions → scripts/cf-publicar.mjs (cria KV/D1/R2, migra e publica)
+
+name                = "updance-festival"
+compatibility_date  = "2026-06-17"
+main                = "./worker/index.js"
+
+[assets]
+directory          = "dist"
+binding            = "ASSETS"
+html_handling      = "auto-trailing-slash"
+not_found_handling = "404-page"
+
+# o Worker roda ANTES dos assets só nestas rotas (resto continua estático e rápido).
+# /admin/* PRECISA estar aqui: é o Worker que exige a sessão de admin (a_session).
+run_worker_first   = ["/api/*", "/admin", "/admin/*", "/ouvir/*"]
+
+# Namespace KV — guarda as sessões (m_session / a_session) e cooldowns.
+# Criado automaticamente pelo scripts/cf-publicar.mjs (título "updance-festival-sessoes"),
+# ou à mão:  npx wrangler kv namespace create KV   → cole o id abaixo.
+[[kv_namespaces]]
+binding = "KV"
+id      = "00000000000000000000000000000000"
+
+[vars]
+AMBIENTE         = "producao"
+MAIL_FROM        = "Up Dance <onboarding@resend.dev>"
+GMAIL_USER       = "updancexperience@gmail.com"
+# Custo do hash de senha (mesmo padrão do worker do blog: 100.000).
+PBKDF2_ITERACOES = "100000"
+
+[[d1_databases]]
+binding        = "DB"
+database_name  = "updance-festival_db"
+database_id    = "191b7031-3739-449b-9d19-ba12c3c12b25"
+migrations_dir = "migrations"
+
+# Áudios (bucket privado — nunca ativar r2.dev)
+[[r2_buckets]]
+binding     = "AUDIOS"
+bucket_name = "updance-festival-audios"
+
+[observability]
+enabled = true
+
+# Segredos (NUNCA aqui):
+#   ADMIN_SETUP_KEY     chave de /api/admin/setup (cria/redefine administrador)
+#   GMAIL_APP_PASSWORD  senha de app do Gmail (e-mail de "esqueci minha senha")

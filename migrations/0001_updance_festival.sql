@@ -1,7 +1,59 @@
--- updance-festival_db — banco próprio do festival (Cloudflare D1 / SQLite)
--- Autenticação e contas ficam no ecossistema UpDance (KV compartilhado).
--- Aqui só ficam os dados do festival. Pessoas são referenciadas pelo e-mail da conta UpDance.
--- Datas em milissegundos UTC (INTEGER), exceto eventos.data (AAAA-MM-DD).
+-- updance-festival_db — banco do UpDance Festival (sistema independente)
+-- Cloudflare D1 / SQLite. Datas em milissegundos UTC (INTEGER), exceto eventos.data (AAAA-MM-DD).
+-- Senhas: PBKDF2-SHA256 com sal individual (nunca em texto). sessao_versao invalida sessões abertas
+-- quando a senha muda, é redefinida ou a conta é desativada.
+
+/* ======================= CONTAS ======================= */
+
+CREATE TABLE IF NOT EXISTS admins (
+  id                 TEXT PRIMARY KEY,
+  nome               TEXT NOT NULL,
+  email              TEXT NOT NULL UNIQUE,     -- minúsculas
+  senha_hash         TEXT NOT NULL,
+  senha_sal          TEXT NOT NULL,
+  senha_iter         INTEGER NOT NULL,
+  trocar_senha       INTEGER NOT NULL DEFAULT 1, -- 1 = senha provisória: trocar no próximo acesso
+  sessao_versao      INTEGER NOT NULL DEFAULT 1,
+  ativo              INTEGER NOT NULL DEFAULT 1,
+  tentativas_falhas  INTEGER NOT NULL DEFAULT 0,
+  bloqueado_ate      INTEGER NOT NULL DEFAULT 0,
+  ultimo_acesso      INTEGER,
+  criado_por         TEXT,
+  criado_em          INTEGER NOT NULL
+);
+
+-- Conta do jurado (uma por pessoa, reaproveitada em vários eventos)
+CREATE TABLE IF NOT EXISTS jurados (
+  id                 TEXT PRIMARY KEY,
+  nome               TEXT NOT NULL,
+  email              TEXT NOT NULL UNIQUE,     -- minúsculas
+  telefone           TEXT,
+  senha_hash         TEXT NOT NULL,
+  senha_sal          TEXT NOT NULL,
+  senha_iter         INTEGER NOT NULL,
+  trocar_senha       INTEGER NOT NULL DEFAULT 1,
+  sessao_versao      INTEGER NOT NULL DEFAULT 1,
+  ativo              INTEGER NOT NULL DEFAULT 1,
+  tentativas_falhas  INTEGER NOT NULL DEFAULT 0,
+  bloqueado_ate      INTEGER NOT NULL DEFAULT 0,
+  ultimo_acesso      INTEGER,
+  criado_por         TEXT,
+  criado_em          INTEGER NOT NULL
+);
+
+/* ======================= FESTIVAL ======================= */
+
+-- Grupos, escolas e companhias participantes
+CREATE TABLE IF NOT EXISTS grupos (
+  id           TEXT PRIMARY KEY,
+  nome         TEXT NOT NULL,
+  nome_chave   TEXT NOT NULL UNIQUE,           -- nome normalizado (evita duplicatas por acento/caixa)
+  cidade       TEXT,
+  responsavel  TEXT,
+  email        TEXT,
+  telefone     TEXT,
+  criado_em    INTEGER NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS eventos (
   id                  TEXT PRIMARY KEY,
@@ -13,7 +65,7 @@ CREATE TABLE IF NOT EXISTS eventos (
   fecha_em            INTEGER NOT NULL,           -- depois disso, só reenvio de pendências (tolerância)
   anonimizar_jurados  INTEGER NOT NULL DEFAULT 0, -- 1 = participantes veem "jurado-1" em vez do nome
   duracao_max_s       INTEGER NOT NULL DEFAULT 480,
-  criado_por          TEXT NOT NULL,              -- e-mail do admin UpDance
+  criado_por          TEXT NOT NULL,
   criado_em           INTEGER NOT NULL
 );
 
@@ -22,24 +74,23 @@ CREATE TABLE IF NOT EXISTS coreografias (
   evento_id  TEXT NOT NULL REFERENCES eventos(id),
   numero     INTEGER NOT NULL,
   nome       TEXT NOT NULL,
-  grupo      TEXT,
+  grupo_id   TEXT REFERENCES grupos(id),
   categoria  TEXT,
   UNIQUE (evento_id, numero)
 );
+CREATE INDEX IF NOT EXISTS idx_coreografias_grupo ON coreografias(grupo_id);
 
--- Jurado = membro UpDance (e-mail da conta) vinculado a um evento pelo admin
-CREATE TABLE IF NOT EXISTS jurados (
-  id         TEXT PRIMARY KEY,
+-- Jurados escalados em cada evento
+CREATE TABLE IF NOT EXISTS evento_jurados (
   evento_id  TEXT NOT NULL REFERENCES eventos(id),
-  email      TEXT NOT NULL,                       -- minúsculas, igual ao da sessão msess:<sid>
-  nome       TEXT NOT NULL,
-  ordem      INTEGER NOT NULL,                    -- usado no nome anonimizado (jurado-1, jurado-2...)
+  jurado_id  TEXT NOT NULL REFERENCES jurados(id),
+  ordem      INTEGER NOT NULL,                  -- usado no nome anonimizado (jurado-1, jurado-2...)
   ativo      INTEGER NOT NULL DEFAULT 1,
   criado_em  INTEGER NOT NULL,
-  UNIQUE (evento_id, email),
+  PRIMARY KEY (evento_id, jurado_id),
   UNIQUE (evento_id, ordem)
 );
-CREATE INDEX IF NOT EXISTS idx_jurados_email ON jurados(email);
+CREATE INDEX IF NOT EXISTS idx_evento_jurados_jurado ON evento_jurados(jurado_id);
 
 CREATE TABLE IF NOT EXISTS gravacoes (
   id                    TEXT PRIMARY KEY,         -- UUID gerado no aparelho (permite gravar offline)
@@ -92,7 +143,7 @@ CREATE TABLE IF NOT EXISTS links_entrega (
 CREATE TABLE IF NOT EXISTS auditoria (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   evento_id  TEXT,
-  ator       TEXT NOT NULL,        -- "membro:<email>", "admin:<email>", "publico"
+  ator       TEXT NOT NULL,        -- "admin:<email>", "jurado:<email>", "publico", "sistema"
   acao       TEXT NOT NULL,
   alvo       TEXT,
   detalhes   TEXT,                 -- JSON
