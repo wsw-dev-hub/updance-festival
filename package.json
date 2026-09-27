@@ -9,9 +9,8 @@
     "dev:worker": "vite build && wrangler dev --port 8787",
     "build": "vite build",
     "preview": "vite build && wrangler dev --port 8787",
-    "db:local": "wrangler d1 migrations apply updance-festival_db --local",
-    "verificar": "node scripts/verificar-sintaxe.mjs && vite build && wrangler deploy --dry-run --outdir .wrangler/dry-run",
-    "cf:publicar": "vite build && node scripts/cf-publicar.mjs"
+    "db:local": "wrangler d1 execute updance-festival_db --local --file=schema.sql",
+    "deploy": "vite build && wrangler deploy"
   },
   "devDependencies": {
     "vite": "^7.3.6",

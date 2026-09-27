@@ -1,7 +1,11 @@
 # UpDance Festival — Worker (API + autenticação) + assets gerados pelo Vite (dist/).
-# Build:   npm run build      (vite build → dist/)
-# Local:   npm run dev:worker (wrangler dev sobre dist/)  +  npm run dev (Vite com HTTPS e proxy)
-# Deploy:  GitHub Actions → scripts/cf-publicar.mjs (cria KV/D1/R2, migra e publica)
+#
+# Cloudflare → Workers & Pages → updance-festival → Settings → Build:
+#   Build command:  npm run build
+#   Deploy command: npx wrangler deploy
+#
+# Os recursos abaixo (KV, D1, R2) precisam EXISTIR na conta antes do deploy — o wrangler não os cria.
+# Passo a passo no README ("Colocar no ar").
 
 name                = "updance-festival"
 compatibility_date  = "2026-06-17"
@@ -18,8 +22,7 @@ not_found_handling = "404-page"
 run_worker_first   = ["/api/*", "/admin", "/admin/*", "/ouvir/*"]
 
 # Namespace KV — guarda as sessões (m_session / a_session) e cooldowns.
-# Criado automaticamente pelo scripts/cf-publicar.mjs (título "updance-festival-sessoes"),
-# ou à mão:  npx wrangler kv namespace create KV   → cole o id abaixo.
+# Painel: Storage & Databases → Workers KV → (namespace) → copie o "Namespace ID" para cá.
 [[kv_namespaces]]
 binding = "KV"
 id      = "10d76ce53a5049fbab9cab01b68936e2"
@@ -34,10 +37,10 @@ PBKDF2_ITERACOES = "100000"
 [[d1_databases]]
 binding        = "DB"
 database_name  = "updance-festival_db"
-database_id    = "cffc135e-aa51-41da-8f87-1b9f4bcf535d"
-migrations_dir = "migrations"
+database_id    = "191b7031-3739-449b-9d19-ba12c3c12b25"
+# Sem migrações: o esquema completo está em schema.sql (executar uma vez no Console do D1).
 
-# Áudios (bucket privado — nunca ativar r2.dev)
+# Áudios (bucket privado — nunca ativar r2.dev). Criar em: R2 Object Storage → Create bucket.
 [[r2_buckets]]
 binding     = "AUDIOS"
 bucket_name = "updance-festival-audios"
@@ -45,6 +48,6 @@ bucket_name = "updance-festival-audios"
 [observability]
 enabled = true
 
-# Segredos (NUNCA aqui):
+# Segredos (NUNCA aqui) — painel: Settings → Variables and Secrets → Add → tipo "Secret":
 #   ADMIN_SETUP_KEY     chave de /api/admin/setup (cria/redefine administrador)
 #   GMAIL_APP_PASSWORD  senha de app do Gmail (e-mail de "esqueci minha senha")

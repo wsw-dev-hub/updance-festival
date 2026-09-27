@@ -104,3 +104,25 @@ audio { width: 100%; margin: 8px 0; }
 .admin-topbar .udx-marca-icone { width: 40px; height: 40px; border-radius: 10px; }
 #sel-jurado-escala { min-width: 260px; }
 #mensagem:empty { display: none; }
+
+/* ---- Responsividade (celular/tablet) ----
+   A grade principal não pode crescer com o conteúdo: as tabelas rolam dentro do próprio card. */
+.admin-main { grid-template-columns: minmax(0, 1fr); }
+.secao, #conteudo-evento, .panel { min-width: 0; }
+.tabela-rolagem { -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+.tabela-rolagem table { min-width: 680px; }
+@media (max-width: 720px) {
+  .admin-main { padding: 14px 12px 48px; gap: 12px; }
+  .card { padding: 14px; }
+  /* Abas em uma linha só, com rolagem lateral (padrão de abas do app UpDance) */
+  .tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -12px; padding: 0 12px 2px; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: none; padding: 8px 12px; font-size: 14px; }
+  .tabs-principal .tab { border-radius: 10px 10px 0 0; }
+  select, #sel-jurado-escala { min-width: 0; width: 100%; }
+  #sel-evento { flex: 1 1 100%; }
+  .destaque code { font-size: 12px; }
+  .caixa-senha code { font-size: 20px; }
+  .admin-topbar { padding: 10px 12px; }
+  #adminChip { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
