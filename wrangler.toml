@@ -22,7 +22,7 @@ run_worker_first   = ["/api/*", "/admin", "/admin/*", "/ouvir/*"]
 # ou à mão:  npx wrangler kv namespace create KV   → cole o id abaixo.
 [[kv_namespaces]]
 binding = "KV"
-id      = "00000000000000000000000000000000"
+id      = "10d76ce53a5049fbab9cab01b68936e2"
 
 [vars]
 AMBIENTE         = "producao"
@@ -34,7 +34,7 @@ PBKDF2_ITERACOES = "100000"
 [[d1_databases]]
 binding        = "DB"
 database_name  = "updance-festival_db"
-database_id    = "191b7031-3739-449b-9d19-ba12c3c12b25"
+database_id    = "cffc135e-aa51-41da-8f87-1b9f4bcf535d"
 migrations_dir = "migrations"
 
 # Áudios (bucket privado — nunca ativar r2.dev)
