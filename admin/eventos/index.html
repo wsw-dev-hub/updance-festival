@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#02021a">
+  <title>Eventos e responsáveis · UpDance Festival</title>
+  <link rel="icon" href="/images/icons/udx-icon.ico" type="image/x-icon">
+  <script src="/js/tema.js"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Playfair+Display:ital@1&family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@6.9.96/css/materialdesignicons.min.css">
+  <link rel="stylesheet" href="/src/css/udx-tokens.css">
+  <link rel="stylesheet" href="/src/admin/admin.css">
+  <script type="module" src="/src/admin/eventos.js"></script>
+</head>
+<body class="page-admin page-eventos">
+<header class="admin-topbar">
+  <span class="udx-marca"><img class="udx-marca-icone" src="/images/icons/udx-icon.png" alt="Up Dance Xperience">
+    <span class="udx-marca-texto"><span class="l1">UpDance</span><span class="l2">Festival · Eventos</span></span></span>
+  <div class="topbar-acoes">
+    <a id="link-dashboard" class="btn btn-sec" href="/admin/" hidden><i class="mdi mdi-view-dashboard-outline"></i><span class="rotulo"> Painel de controle</span></a>
+    <span id="adminChip" class="type-chip" hidden><i class="mdi mdi-account-tie"></i><span id="adminEmail"></span></span>
+    <button id="btnTema" class="btn btn-icone" type="button" aria-label="Alternar tema" title="Tema claro/escuro"><i class="mdi mdi-theme-light-dark"></i><span class="rotulo-alt">Tema</span></button>
+    <button id="btnSair" class="btn btn-icone" type="button" aria-label="Sair" title="Sair"><i class="mdi mdi-logout"></i><span class="rotulo-alt">Sair</span></button>
+  </div>
+</header>
+
+<main class="admin-main">
+  <section class="card cabeca-painel">
+    <h1>Eventos e <em>responsáveis</em></h1>
+    <p id="texto-intro" class="muted"></p>
+  </section>
+
+  <p id="mensagem" class="mensagem" role="status" aria-live="polite"></p>
+
+  <!-- Credenciais novas (aparecem uma única vez) -->
+  <div id="caixa-credenciais" class="card caixa-senha" hidden role="alert">
+    <div>
+      <strong id="credenciais-titulo">Contas criadas</strong>
+      <p class="muted">Envie a cada pessoa, por um canal seguro, o endereço <code id="link-login"></code>, o e-mail e a senha provisória. As senhas não serão mostradas de novo; no primeiro acesso cada um cria a própria.</p>
+    </div>
+    <ul id="lista-credenciais" class="lista-credenciais"></ul>
+    <div class="linha">
+      <button id="btn-copiar-credenciais" class="btn btn-sec" type="button"><i class="mdi mdi-content-copy"></i> Copiar tudo</button>
+      <button id="btn-fechar-credenciais" class="btn btn-sec" type="button"><i class="mdi mdi-close"></i> Fechar</button>
+    </div>
+  </div>
+
+  <!-- ============================ NOVO EVENTO ============================ -->
+  <section class="card" id="novo">
+    <details id="det-novo">
+      <summary><i class="mdi mdi-calendar-plus"></i> <strong>Novo evento</strong></summary>
+      <form id="form-evento" class="grade">
+        <label>Nome <input name="nome" required maxlength="120" placeholder="Festival UpDance 2026"></label>
+        <label>Data <input name="data" type="date" required></label>
+        <label>Local <input name="local" maxlength="160" placeholder="Teatro, cidade"></label>
+        <label>Jurados podem avaliar a partir de <input name="abre_em" type="datetime-local"></label>
+        <label>Encerramento <input name="fecha_em" type="datetime-local"></label>
+        <label>Duração máxima por comentário (min) <input name="duracao_max_min" type="number" min="1" max="30" value="8"></label>
+        <label>Nota mínima <input name="nota_min" type="number" min="0" max="1000" step="any" value="0"></label>
+        <label>Nota máxima <input name="nota_max" type="number" min="1" max="1000" step="any" value="10"></label>
+        <label>Casas decimais da nota
+          <select name="nota_casas"><option value="0">0 (ex.: 8)</option><option value="1" selected>1 (ex.: 8,5)</option><option value="2">2 (ex.: 8,75)</option></select></label>
+        <label class="check"><input name="anonimizar_jurados" type="checkbox"> Participantes veem "Jurado 1, 2…" em vez do nome</label>
+
+        <fieldset class="campo-largo bloco-responsaveis">
+          <legend><i class="mdi mdi-account-tie"></i> Responsáveis do evento</legend>
+          <p id="aviso-criador" class="muted" hidden><i class="mdi mdi-check-circle-outline"></i> Você será responsável por este evento automaticamente. Adicione outras pessoas, se quiser.</p>
+          <p class="muted">Quem ainda não tem conta recebe uma senha provisória. O responsável administra o evento com autonomia: dados, grupos, jurados, coreografias, notas, ranking, áudios e outros responsáveis.</p>
+          <div id="linhas-responsaveis" class="linhas-responsaveis"></div>
+          <button id="btn-mais-responsavel" class="btn btn-sec" type="button"><i class="mdi mdi-account-plus-outline"></i> Adicionar responsável</button>
+        </fieldset>
+
+        <div class="linha campo-largo"><button type="submit" class="btn btn-hot" id="btn-criar-evento"><i class="mdi mdi-calendar-check"></i> Criar evento</button></div>
+      </form>
+    </details>
+  </section>
+
+  <!-- ============================ EVENTOS ============================ -->
+  <div class="linha filtros" id="linha-busca" hidden>
+    <input id="busca-eventos" type="search" placeholder="Buscar evento ou responsável" aria-label="Buscar eventos">
+  </div>
+  <div id="lista-eventos" class="grade-eventos grade-eventos-largo" aria-live="polite"></div>
+
+  <!-- ============================ CONTA ============================ -->
+  <section class="card">
+    <details>
+      <summary><i class="mdi mdi-account-cog"></i> Minha conta · <span id="conta-email" class="muted"></span></summary>
+      <form id="form-conta-senha" class="grade grade-compacta" autocomplete="on">
+        <input type="email" id="conta-usuario" autocomplete="username" hidden>
+        <label>Senha atual <input name="atual" type="password" required autocomplete="current-password"></label>
+        <label>Nova senha <input name="nova" type="password" required minlength="8" autocomplete="new-password"></label>
+        <label>Repita a nova senha <input name="confirma" type="password" required minlength="8" autocomplete="new-password"></label>
+        <button type="submit" class="btn btn-hot"><i class="mdi mdi-lock-reset"></i> Trocar senha</button>
+      </form>
+    </details>
+  </section>
+</main>
+</body>
+</html>

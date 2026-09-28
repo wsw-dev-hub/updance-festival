@@ -5,25 +5,29 @@ Sistema para jurados de festivais gravarem comentários em áudio (gravar / paus
 Projeto único:
 - **Vite** gera as páginas em `dist/`;
 - **`wrangler.toml`** publica o Worker (`worker/index.js`) com esses arquivos;
-- **`schema.sql`** tem o banco inteiro, em um arquivo só, sem migrações. Para um banco que já existia, há os arquivos de atualização `atualizacao-notas-ranking.sql` e `atualizacao-grupos-equipe.sql` (veja o passo 4).
+- **`schema.sql`** tem o banco inteiro, em um arquivo só, sem migrações. Para um banco que já existia, há os arquivos de atualização `atualizacao-notas-ranking.sql`, `atualizacao-grupos-equipe.sql` e `atualizacao-grupos-por-evento.sql` (veja o passo 4).
 
 ## Telas
 
 | Tela | Quem usa | O que tem |
 |---|---|---|
 | `/` | jurados | Gravação do comentário em áudio **e nota da coreografia** (funciona sem internet: a nota fica guardada e é enviada quando a rede volta) |
-| `/admin/` | organização (nível **geral**) | Dashboard: cartões dos eventos, jurados, grupos, administradores, auditoria |
-| `/admin/evento/?id=…` | organização e **responsáveis do evento** | Tela exclusiva de cada evento: **Notas** (jurado × coreografia, com status dos áudios e média automática), **Ranking** (pódio das 3 maiores médias + lista completa, por solos, duos, trios e grupos), Áudios, Coreografias, Jurados, Responsáveis, Auditoria |
+| `/admin/` | organização (nível **geral**) | **Painel de controle** do sistema: números gerais (eventos, responsáveis, jurados, grupos, notas, áudios, armazenamento, logins falhos), alertas (evento sem responsável, contas bloqueadas, grupos sem evento), tabela de todos os eventos, administradores, contas de jurados (nova senha, desativar), grupos de todos os eventos (consulta), auditoria geral. **Não cadastra** eventos, grupos nem jurados. |
+| `/admin/eventos/` | geral e **responsáveis** | **Eventos e responsáveis**: cria eventos (já com os responsáveis) e, em cada cartão, adiciona, remove e gera nova senha para os responsáveis. |
+| `/admin/evento/?id=…` | geral e **responsáveis do evento** | Tela de cada evento: **Notas** (jurado × coreografia, status dos áudios, média automática), **Ranking** (pódio das 3 maiores médias + lista completa, por solos, duos, trios e grupos), Áudios, Coreografias, **Grupos** (cadastro com equipe), **Jurados** (cadastro e escala), Auditoria. |
 
 **Níveis de administrador:**
-- **Geral:** a organização. Acessa tudo e cria eventos.
-- **Responsável de evento:** entra direto na tela dos eventos ligados a ele e tem autonomia sobre eles:
+- **Geral:** a organização do festival. Usa o painel de controle, vê todos os eventos e pode agir em qualquer um.
+- **Responsável de evento:** ao entrar, cai em `/admin/eventos/`. Tem autonomia sobre os eventos em que é responsável:
+  - cria novos eventos (e vira responsável deles automaticamente);
+  - define quem mais administra cada evento: adiciona, remove, gera nova senha (o evento nunca fica sem responsável);
   - edita dados e escala de notas;
-  - escala jurados por e-mail;
-  - cadastra coreografias;
-  - aprova áudios, gera links de entrega e acompanha notas e ranking.
+  - cadastra **grupos/escolas** e **jurados** na tela do evento, e edita nome/telefone e senha dos jurados;
+  - cadastra coreografias, aprova áudios, gera links de entrega, acompanha notas e ranking.
 
-  Ele não vê contas, outros eventos nem o dashboard.
+  Ele não vê o painel de controle, outros eventos, nem contas de outras equipes. Uma conta (jurado ou responsável) que também atua em evento de **outra** equipe só pode ter senha ou nome alterados pela organização geral: assim ninguém ganha acesso a evento alheio redefinindo a senha de alguém.
+
+**Grupos por evento:** cada grupo/escola pertence a um evento. O mesmo nome pode existir em eventos diferentes (com contatos e equipes próprios), e um responsável nunca vê os grupos de outro evento.
 
 **Notas e médias:**
 - A escala é definida por evento: mínima, máxima e casas decimais. O padrão é **0 a 10, uma casa**.
@@ -132,7 +136,11 @@ O resultado deve ter **12 tabelas**: `admins, auditoria, coreografias, evento_ju
 >
 > Nada é apagado. Se for executado de novo, os `ALTER TABLE` apenas avisam "duplicate column name".
 >
-> **Depois**, execute também, uma vez, o **`atualizacao-grupos-equipe.sql`**. Ele acrescenta ao `grupos` as colunas `integrantes`, `coreografo`, `diretores` e `coordenadores`. Banco criado com o `schema.sql` desta versão já tem tudo e não precisa de nenhum arquivo de atualização.
+> **Depois**, execute também, uma vez cada, na ordem:
+> 1. **`atualizacao-grupos-equipe.sql`**: acrescenta ao `grupos` as colunas `integrantes`, `coreografo`, `diretores` e `coordenadores`.
+> 2. **`atualizacao-grupos-por-evento.sql`**: liga cada grupo ao seu evento (coluna `evento_id`). Grupo usado em mais de um evento ganha uma cópia por evento, com a mesma equipe; grupo sem coreografia fica "sem evento" (aparece no painel de controle para excluir). Nenhuma coreografia, nota ou áudio é apagado. A consulta do fim mostra quantos grupos ficaram em cada evento.
+>
+> Resumo da ordem para um banco antigo: `atualizacao-notas-ranking.sql` → `atualizacao-grupos-equipe.sql` → `atualizacao-grupos-por-evento.sql`. Pule os que já executou. Banco criado com o `schema.sql` desta versão já tem tudo e não precisa de nenhum arquivo de atualização.
 
 > **Se o banco já tinha tabelas de uma versão anterior deste projeto,** confira com a consulta abaixo:
 >
@@ -182,21 +190,25 @@ Não cadastre variáveis de texto (**Text**) pelo painel. As variáveis do `[var
 
 1. Abra `https://updance-festival.<sua-conta>.workers.dev/admin-login/` e clique em **Primeiro acesso (chave de setup)**.
 2. Informe a `ADMIN_SETUP_KEY`, o seu nome, o seu e-mail e uma senha com pelo menos 10 caracteres, letras e números. Depois entre com esse e-mail e essa senha.
-3. No dashboard, abra **Eventos → Novo evento**. Informe as datas e a escala de notas; depois de criar, você cai na **tela do evento**.
-4. Na tela do evento, faça nesta ordem:
-   1. **Coreografias:** importe o CSV `numero;nome;grupo;categoria;formacao`.
-   2. **Jurados:** informe nome e e-mail de cada um. Quem não tem conta recebe uma senha provisória, que aparece uma única vez.
-   3. **Responsáveis:** opcional. Informe nome e e-mail de quem vai cuidar do evento; ele recebe uma senha provisória e acesso só a esta tela.
-5. Envie a cada jurado o **link do app** e a senha provisória. No 1º acesso, ele cria a própria senha. Envie ao responsável o endereço `/admin-login/` e a senha provisória dele.
-6. Durante o evento, a aba **Notas** atualiza sozinha a cada 15 s. O **Ranking** mostra o pódio de cada formação e exporta CSV.
+3. Você cai no **Painel de controle**. Clique em **Eventos e responsáveis** (ou **Novo evento**).
+4. Em **Novo evento**, informe nome, data, horários, escala de notas e, no bloco **Responsáveis do evento**, o nome e o e-mail de quem vai administrar (pode ser mais de um; também dá para deixar em branco e adicionar depois no cartão do evento). Clique em **Criar evento**.
+   - As contas novas aparecem num quadro com o endereço `/admin-login/` e a senha provisória de cada uma (**Copiar tudo**). Elas aparecem uma única vez.
+5. Envie a cada responsável esse endereço, o e-mail e a senha provisória. No 1º acesso, ele cria a própria senha e cai na tela **Eventos e responsáveis**, só com os eventos dele.
+6. O responsável (ou você) clica em **Abrir tela do evento** e faz, nesta ordem:
+   1. **Grupos:** cadastra cada grupo/escola com cidade, contato, integrantes, coreógrafo(a)/professor(a), diretores e coordenadores. (Grupos que faltarem também são criados pelo CSV do passo seguinte.)
+   2. **Coreografias:** importa o CSV `numero;nome;grupo;categoria;formacao` ou cadastra uma a uma.
+   3. **Jurados:** informa nome, e-mail e telefone de cada um. Quem não tem conta recebe uma senha provisória, que aparece uma única vez.
+7. Envie a cada jurado o **link do app** (botão **Link dos jurados**) e a senha provisória. No 1º acesso, ele cria a própria senha.
+8. Durante o evento, a aba **Notas** atualiza sozinha a cada 15 s. O **Ranking** mostra o pódio de cada formação e exporta CSV.
 
 ### Passo 9 — Verificação rápida
 
 - [ ] `/` abre a tela de login do jurado com a marca UDX.
 - [ ] `/admin/` sem login leva para `/admin-login/`.
-- [ ] Depois do login, a área de admin lista Eventos, Jurados, Grupos, Administradores, Minha conta e Auditoria.
+- [ ] Depois do login, o **Painel de controle** mostra os números gerais e as abas Administradores, Jurados, Grupos, Auditoria e Minha conta.
+- [ ] Um responsável de teste entra e cai em `/admin/eventos/`; abrir `/admin/` o leva de volta para lá.
 - [ ] Um jurado de teste entra, cria a senha, testa o microfone, grava e vê **✓ enviado**.
-- [ ] Na aba **Gravações**, o admin ouve o áudio.
+- [ ] Na aba **Áudios** da tela do evento, o admin ouve o áudio.
 - [ ] Se algo falhar, veja **Workers & Pages → updance-festival → Logs** (observability está ligado).
 
 ---
@@ -216,7 +228,11 @@ Não cadastre variáveis de texto (**Text**) pelo painel. As variáveis do `[var
 | `POST /api/admin/login` `{email, password}` | admin | Cria a sessão (cookie `a_session`, 12 h) |
 | `POST /api/admin/logout` · `POST /api/admin/senha` · `GET /api/admin/me` | admin | Sair, trocar a senha, identificar (`nivel`: geral/responsavel) |
 | `GET /api/admin/eventos/:id/notas` | geral ou responsável | Quadro de notas: jurado × coreografia, status dos áudios, média e contagem |
-| `POST` / `DELETE /api/admin/eventos/:id/responsaveis` | geral | Liga ou desliga responsáveis do evento |
+| `GET /api/admin/resumo` | geral | Números e alertas do painel de controle |
+| `POST /api/admin/eventos` `{…, responsaveis:[{nome,email}]}` | geral ou responsável | Cria o evento já com os responsáveis (quem cria, se responsável, entra automaticamente) |
+| `POST` / `DELETE /api/admin/eventos/:id/responsaveis` · `POST …/responsaveis/:admin/redefinir-senha` | geral ou responsável do evento | Liga, desliga ou gera nova senha para responsáveis (o último não sai) |
+| `GET` / `POST /api/admin/eventos/:id/grupos` | geral ou responsável do evento | Grupos/escolas do evento |
+| `POST /api/admin/eventos/:id/jurados` `{nome,email,telefone}` | geral ou responsável do evento | Cadastra (se preciso) e escala o jurado |
 
 **Segurança:**
 - **Senhas:** PBKDF2-SHA256 com 100.000 iterações, como no blog. As contas são bloqueadas por 15 min após 5 erros; o setup também bloqueia o IP após 5 chaves erradas.
@@ -254,12 +270,13 @@ npm run dev                      # terminal 2: Vite com HTTPS em https://localho
 ## Estrutura
 
 ```
-index.html · admin/ · admin/evento/ · admin-login/ · reset-senha/ · 404.html   páginas (entradas do Vite)
+index.html · admin/ · admin/eventos/ · admin/evento/ · admin-login/ · reset-senha/ · 404.html   páginas (entradas do Vite)
 src/            JS/CSS do front (empacotados pelo Vite)
 public/         copiado como está: sw.js, manifest, _headers, js/tema.js, images/icons/
 worker/         index.js (rotas de acesso + roteamento) · lib/ · rotas/
 schema.sql      banco completo (arquivo único)
 atualizacao-notas-ranking.sql   bancos criados antes das notas/ranking (executar 1º)
 atualizacao-grupos-equipe.sql   bancos criados antes da equipe dos grupos (executar 2º)
+atualizacao-grupos-por-evento.sql   bancos criados antes dos grupos por evento (executar 3º)
 vite.config.js · wrangler.toml · package.json
 ```

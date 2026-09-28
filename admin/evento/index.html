@@ -19,7 +19,8 @@
   <span class="udx-marca"><img class="udx-marca-icone" src="/images/icons/udx-icon.png" alt="Up Dance Xperience">
     <span class="udx-marca-texto"><span class="l1">UpDance</span><span class="l2">Festival · Evento</span></span></span>
   <div class="topbar-acoes">
-    <a id="link-dashboard" class="btn btn-sec" href="/admin/" hidden><i class="mdi mdi-view-dashboard-outline"></i><span class="rotulo"> Dashboard</span></a>
+    <a id="link-dashboard" class="btn btn-sec" href="/admin/" hidden><i class="mdi mdi-view-dashboard-outline"></i><span class="rotulo"> Painel</span></a>
+    <a class="btn btn-sec" href="/admin/eventos/"><i class="mdi mdi-calendar-multiple"></i><span class="rotulo"> Eventos</span></a>
     <span id="adminChip" class="type-chip" hidden><i class="mdi mdi-account-tie"></i><span id="adminEmail"></span></span>
     <button id="btnTema" class="btn btn-icone" type="button" aria-label="Alternar tema" title="Tema claro/escuro"><i class="mdi mdi-theme-light-dark"></i><span class="rotulo-alt">Tema</span></button>
     <button id="btnSair" class="btn btn-icone" type="button" aria-label="Sair" title="Sair"><i class="mdi mdi-logout"></i><span class="rotulo-alt">Sair</span></button>
@@ -43,7 +44,9 @@
     <div class="linha">
       <button id="btn-editar-evento" class="btn btn-sec" type="button"><i class="mdi mdi-pencil"></i> Editar evento</button>
       <button id="btn-atualizar" class="btn btn-sec" type="button"><i class="mdi mdi-refresh"></i> Atualizar</button>
+      <a id="link-responsaveis" class="btn btn-sec" href="/admin/eventos/"><i class="mdi mdi-account-tie"></i> Responsáveis</a>
     </div>
+    <p class="muted" id="ev-responsaveis"></p>
     <div class="destaque">
       <span><i class="mdi mdi-link-variant"></i> Link do app para os jurados:</span>
       <code id="link-jurados-url"></code>
@@ -97,11 +100,18 @@
     <button class="tab" data-aba="ranking" role="tab"><i class="mdi mdi-trophy-outline"></i> Ranking</button>
     <button class="tab" data-aba="gravacoes" role="tab"><i class="mdi mdi-waveform"></i> Áudios <span id="c-gravacoes" class="contador"></span></button>
     <button class="tab" data-aba="coreografias" role="tab"><i class="mdi mdi-human-female-dance"></i> Coreografias <span id="c-coreografias" class="contador"></span></button>
+    <button class="tab" data-aba="grupos" role="tab"><i class="mdi mdi-account-group"></i> Grupos <span id="c-grupos" class="contador"></span></button>
     <button class="tab" data-aba="jurados" role="tab"><i class="mdi mdi-gavel"></i> Jurados <span id="c-jurados" class="contador"></span></button>
-    <button class="tab" data-aba="responsaveis" role="tab" hidden id="tab-responsaveis"><i class="mdi mdi-account-tie"></i> Responsáveis</button>
     <button class="tab" data-aba="auditoria" role="tab"><i class="mdi mdi-history"></i> Auditoria</button>
     <button class="tab" data-aba="conta" role="tab"><i class="mdi mdi-account-cog"></i> Minha conta</button>
   </nav>
+
+  <!-- Player único (Notas, Áudios e Coreografias): fica fixo no topo enquanto a lista rola -->
+  <div id="barra-player" class="barra-player" hidden>
+    <div class="barra-player-info"><i class="mdi mdi-headphones"></i> <span id="player-titulo"></span>
+      <button id="btn-fechar-player" class="btn btn-sec btn-mini" type="button" aria-label="Fechar o player"><i class="mdi mdi-close"></i><span class="rotulo-alt">Fechar</span></button></div>
+    <audio id="player" controls preload="metadata"></audio>
+  </div>
 
   <!-- ============================ NOTAS ============================ -->
   <section id="aba-notas" class="card aba">
@@ -118,9 +128,8 @@
       <span><span class="flag f-gravando">…</span> áudio chegando</span>
       <span><span class="flag f-completo">✓</span> áudio completo</span>
       <span><span class="flag f-aprovado">★</span> áudio aprovado</span>
-      <span class="muted">Toque no sinal para ouvir. A média usa só jurados ativos na escala.</span>
+      <span class="muted">Toque no sinal para ouvir. Para baixar, use a aba Coreografias ou Áudios. A média usa só jurados ativos na escala.</span>
     </p>
-    <audio id="player-notas" controls hidden></audio>
     <div class="tabela-rolagem"><table class="tabela-notas">
       <thead id="th-notas"></thead>
       <tbody id="tb-notas"></tbody>
@@ -163,11 +172,6 @@
       </select>
       <button id="btn-zip" class="btn btn-hot" type="button"><i class="mdi mdi-folder-zip-outline"></i> <span id="btn-zip-texto">Baixar ZIP</span></button>
     </div>
-    <!-- Player fixo no topo da aba enquanto a lista rola -->
-    <div id="barra-player" class="barra-player" hidden>
-      <div class="barra-player-info"><i class="mdi mdi-headphones"></i> <span id="player-titulo"></span></div>
-      <audio id="player" controls preload="metadata"></audio>
-    </div>
     <div class="tabela-rolagem"><table>
       <thead><tr><th>Nº</th><th>Coreografia</th><th>Jurado</th><th>Nota</th><th>Status</th><th>Duração</th><th>Ouvir / baixar</th></tr></thead>
       <tbody id="tb-gravacoes"></tbody>
@@ -198,7 +202,7 @@
       </div>
     </details>
     <div class="tabela-rolagem"><table>
-      <thead><tr><th>Nº</th><th>Nome</th><th>Grupo</th><th>Categoria</th><th>Formação</th><th>Uso</th><th>Ações</th></tr></thead>
+      <thead><tr><th>Nº</th><th>Nome</th><th>Grupo</th><th>Categoria</th><th>Formação</th><th>Áudios dos jurados</th><th>Ações</th></tr></thead>
       <tbody id="tb-coreografias"></tbody>
     </table></div>
   </section>
@@ -214,23 +218,37 @@
       <button type="submit" class="btn btn-hot"><i class="mdi mdi-account-plus"></i> Adicionar ao evento</button>
     </form>
     <div class="tabela-rolagem"><table>
-      <thead><tr><th>#</th><th>Jurado</th><th>E-mail</th><th>Situação</th><th>Último acesso</th><th>Ações</th></tr></thead>
+      <thead><tr><th>#</th><th>Jurado</th><th>E-mail / telefone</th><th>Situação</th><th>Último acesso</th><th>Ações</th></tr></thead>
       <tbody id="tb-escala"></tbody>
     </table></div>
   </section>
 
-  <!-- ============================ RESPONSÁVEIS (somente geral) ============================ -->
-  <section id="aba-responsaveis" class="card aba" hidden>
-    <div class="card-head"><h2>Responsáveis pelo evento</h2></div>
-    <p class="muted">Quem for responsável acessa <strong>só esta tela</strong> (e as de outros eventos ligados a ele), com autonomia para editar o evento, a escala, as coreografias e acompanhar notas, ranking e áudios.</p>
-    <form id="form-responsavel" class="grade grade-compacta">
-      <label>Nome <input name="nome" maxlength="120" placeholder="obrigatório para conta nova"></label>
-      <label>E-mail <input name="email" type="email" required maxlength="254"></label>
-      <button type="submit" class="btn btn-hot"><i class="mdi mdi-account-tie"></i> Adicionar responsável</button>
+  <!-- ============================ GRUPOS / ESCOLAS ============================ -->
+  <section id="aba-grupos" class="card aba" hidden>
+    <div class="card-head"><h2>Grupos e escolas do evento</h2><span class="muted">Também são criados ao importar o CSV de coreografias.</span></div>
+    <form id="form-grupo" class="grade grade-compacta">
+      <input type="hidden" name="id">
+      <label>Nome <input name="nome" required maxlength="160"></label>
+      <label>Cidade <input name="cidade" maxlength="120"></label>
+      <label>Responsável pelo grupo <input name="responsavel" maxlength="120"></label>
+      <label>E-mail <input name="email" type="email" maxlength="254"></label>
+      <label>Telefone <input name="telefone" maxlength="40"></label>
+      <label class="campo-largo">Integrantes <span class="dica">um nome por linha</span>
+        <textarea name="integrantes" rows="4" maxlength="24000" placeholder="Ana Lima&#10;Bruno Souza&#10;Carla Mendes"></textarea></label>
+      <label class="campo-meio">Coreógrafo(a) / professor(a) <span class="dica">um por linha</span>
+        <textarea name="coreografo" rows="2" maxlength="1300"></textarea></label>
+      <label class="campo-meio">Diretores <span class="dica">um por linha</span>
+        <textarea name="diretores" rows="2" maxlength="2500"></textarea></label>
+      <label class="campo-meio">Coordenadores <span class="dica">um por linha</span>
+        <textarea name="coordenadores" rows="2" maxlength="2500"></textarea></label>
+      <div class="linha">
+        <button type="submit" class="btn btn-hot" id="btn-salvar-grupo"><i class="mdi mdi-plus"></i> Cadastrar</button>
+        <button type="button" class="btn btn-sec" id="btn-cancelar-grupo" hidden>Cancelar edição</button>
+      </div>
     </form>
     <div class="tabela-rolagem"><table>
-      <thead><tr><th>Nome</th><th>E-mail</th><th>Situação</th><th>Último acesso</th><th>Ações</th></tr></thead>
-      <tbody id="tb-responsaveis"></tbody>
+      <thead><tr><th>Grupo</th><th>Equipe</th><th>Integrantes</th><th>Contato</th><th>Coreografias</th><th>Ações</th></tr></thead>
+      <tbody id="tb-grupos"></tbody>
     </table></div>
   </section>
 

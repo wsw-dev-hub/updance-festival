@@ -51,21 +51,6 @@ CREATE TABLE IF NOT EXISTS jurados (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jurados_reset ON jurados(reset_hash) WHERE reset_hash IS NOT NULL;
 
-CREATE TABLE IF NOT EXISTS grupos (
-  id           TEXT PRIMARY KEY,
-  nome         TEXT NOT NULL,
-  nome_chave   TEXT NOT NULL UNIQUE,
-  cidade       TEXT,
-  responsavel  TEXT,
-  email        TEXT,
-  telefone     TEXT,
-  criado_em    INTEGER NOT NULL,
-  integrantes    TEXT,
-  coreografo     TEXT,
-  diretores      TEXT,
-  coordenadores  TEXT
-);
-
 CREATE TABLE IF NOT EXISTS eventos (
   id                  TEXT PRIMARY KEY,
   nome                TEXT NOT NULL,
@@ -82,6 +67,23 @@ CREATE TABLE IF NOT EXISTS eventos (
   nota_max            REAL NOT NULL DEFAULT 10,
   nota_casas          INTEGER NOT NULL DEFAULT 1
 );
+
+CREATE TABLE IF NOT EXISTS grupos (
+  id           TEXT PRIMARY KEY,
+  nome         TEXT NOT NULL,
+  nome_chave   TEXT NOT NULL UNIQUE,
+  cidade       TEXT,
+  responsavel  TEXT,
+  email        TEXT,
+  telefone     TEXT,
+  criado_em    INTEGER NOT NULL,
+  integrantes    TEXT,
+  coreografo     TEXT,
+  diretores      TEXT,
+  coordenadores  TEXT,
+  evento_id      TEXT REFERENCES eventos(id)
+);
+CREATE INDEX IF NOT EXISTS idx_grupos_evento ON grupos(evento_id);
 
 CREATE TABLE IF NOT EXISTS evento_responsaveis (
   evento_id  TEXT NOT NULL REFERENCES eventos(id),

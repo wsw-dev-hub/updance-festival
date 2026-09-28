@@ -19,7 +19,8 @@
  * FESTIVAL:
  *   /api/sessao, /api/gravacoes/*, /api/notas/*   app do jurado (exige m_session)
  *   /api/admin/*                                  área de admin (exige a_session)
- *       nível "geral": tudo · nível "responsavel": só os seus eventos (tela /admin/evento/)
+ *       nível "geral": controle geral (/admin/) + qualquer evento
+ *       nível "responsavel": cria e administra os seus eventos (/admin/eventos/ e /admin/evento/)
  *   /ouvir/<token>                       entrega pública ao participante
  *
  * Páginas protegidas: /admin/* (sessão de admin → senão /admin-login/).
@@ -66,11 +67,10 @@ const r = new Roteador()
   .rota('PATCH', '/api/admin/admins/:id', admin.atualizarAdmin)
   .rota('POST', '/api/admin/admins/:id/redefinir-senha', admin.redefinirSenhaAdmin)
   .rota('GET', '/api/admin/jurados', admin.listarJurados)
-  .rota('POST', '/api/admin/jurados', admin.criarJurado)
   .rota('PATCH', '/api/admin/jurados/:id', admin.atualizarJurado)
   .rota('POST', '/api/admin/jurados/:id/redefinir-senha', admin.redefinirSenhaJurado)
+  .rota('GET', '/api/admin/resumo', admin.resumoGeral)
   .rota('GET', '/api/admin/grupos', admin.listarGrupos)
-  .rota('POST', '/api/admin/grupos', admin.criarGrupo)
   .rota('PATCH', '/api/admin/grupos/:id', admin.atualizarGrupo)
   .rota('DELETE', '/api/admin/grupos/:id', admin.excluirGrupo)
 
@@ -83,6 +83,9 @@ const r = new Roteador()
   .rota('PATCH', '/api/admin/eventos/:id/jurados/:jurado', admin.atualizarEscala)
   .rota('POST', '/api/admin/eventos/:id/responsaveis', admin.adicionarResponsavel)
   .rota('DELETE', '/api/admin/eventos/:id/responsaveis/:admin', admin.removerResponsavel)
+  .rota('POST', '/api/admin/eventos/:id/responsaveis/:admin/redefinir-senha', admin.redefinirSenhaResponsavel)
+  .rota('GET', '/api/admin/eventos/:id/grupos', admin.listarGruposEvento)
+  .rota('POST', '/api/admin/eventos/:id/grupos', admin.criarGrupo)
   .rota('GET', '/api/admin/eventos/:id/notas', admin.quadroNotas)
   .rota('POST', '/api/admin/eventos/:id/coreografias', admin.adicionarCoreografias)
   .rota('GET', '/api/admin/eventos/:id/gravacoes', admin.listarGravacoes)
@@ -114,9 +117,10 @@ export default {
           if (!a) destino.searchParams.set('next', pathname + url.search);
           return Response.redirect(destino.toString(), 302);
         }
-        // Responsável de evento: só a tela exclusiva do evento (o dashboard geral é da organização)
-        const telaEvento = pathname === '/admin/evento' || pathname.startsWith('/admin/evento/');
-        if (a.nivel !== 'geral' && !telaEvento) return Response.redirect(new URL('/admin/evento/', url.origin).toString(), 302);
+        // Responsável de evento: tela "Eventos e responsáveis" e telas dos seus eventos.
+        // O dashboard (/admin/) é a ferramenta de controle geral da organização.
+        const permitida = /^\/admin\/(evento|eventos)(\/|$)/.test(pathname);
+        if (a.nivel !== 'geral' && !permitida) return Response.redirect(new URL('/admin/eventos/', url.origin).toString(), 302);
         const resp = await env.ASSETS.fetch(request);
         const h = new Headers(resp.headers);
         h.set('Cache-Control', 'no-store');

@@ -1,27 +1,32 @@
-// Dashboard da organização (nível "geral"): eventos, jurados, grupos, administradores, conta e auditoria.
-// Cada evento abre na sua tela exclusiva (/admin/evento/?id=…), a mesma usada pelos responsáveis do evento.
+// Painel de controle (nível "geral"): visão geral do sistema e gerenciamento de contas.
+// Cadastros operacionais ficam fora daqui:
+//   • eventos e responsáveis  → /admin/eventos/
+//   • grupos, jurados, coreografias, notas, áudios → tela de cada evento (/admin/evento/?id=…)
 
 import {
-  $, api, aviso, tentar, el, icone, botao, selo, vazio, fmtHora, fmtData, comFuso, situacaoEvento, situacaoConta,
+  $, api, aviso, tentar, el, icone, botao, selo, vazio, fmtHora, fmtData, situacaoEvento, situacaoConta,
   copiar, mostrarSenha, ligarCaixaSenha, guardar, ler, trocarMinhaSenha, sair,
 } from './comum.js';
 
 const CHAVE_SECAO = 'udx-festival.admin.secao';
-const estado = { eu: null, secao: 'eventos', jurados: [], grupos: [] };
+const estado = { eu: null, secao: 'geral', jurados: [], grupos: [] };
+const urlEvento = (id) => `/admin/evento/?id=${encodeURIComponent(id)}`;
+const fmtBytes = (b) => (b >= 1073741824 ? `${(b / 1073741824).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} GB`
+  : b >= 1048576 ? `${(b / 1048576).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} MB` : `${Math.round((b || 0) / 1024)} KB`);
 
 /* ------------------------------ navegação ------------------------------ */
 
 const CARREGAR_SECAO = {
-  eventos: carregarEventos,
+  geral: carregarVisaoGeral,
+  admins: carregarAdmins,
   jurados: carregarJurados,
   grupos: carregarGrupos,
-  admins: carregarAdmins,
-  conta: async () => {},
   auditoria: carregarAuditoriaGeral,
+  conta: async () => {},
 };
 
 function trocarSecao(nome) {
-  if (!CARREGAR_SECAO[nome]) nome = 'eventos';
+  if (!CARREGAR_SECAO[nome]) nome = 'geral';
   estado.secao = nome;
   guardar(CHAVE_SECAO, nome);
   for (const b of document.querySelectorAll('[data-secao]')) b.classList.toggle('is-active', b.dataset.secao === nome);
@@ -29,219 +34,69 @@ function trocarSecao(nome) {
   return tentar(CARREGAR_SECAO[nome]);
 }
 
-/* ================================ EVENTOS ================================ */
+/* ================================ VISÃO GERAL ================================ */
 
-const urlEvento = (id) => `/admin/evento/?id=${encodeURIComponent(id)}`;
+const indicador = (valor, rotulo, extra) =>
+  el('div', { class: 'indicador' }, el('span', { class: 'indicador-valor', textContent: valor }), el('span', { class: 'indicador-rotulo', textContent: rotulo }),
+    extra ? el('span', { class: 'indicador-extra muted', textContent: extra }) : null);
 
-async function carregarEventos() {
-  const eventos = await api('GET', '/api/admin/eventos');
-  $('c-eventos').textContent = eventos.length;
-  if (!eventos.length) {
-    $('grade-eventos').replaceChildren(el('p', { class: 'card muted', textContent: 'Nenhum evento criado. Use "Novo evento" acima.' }));
-    return;
-  }
-  $('grade-eventos').replaceChildren(
-    ...eventos.map((e) => {
-      const sit = situacaoEvento(e);
-      const esperadas = e.n_coreografias * e.n_jurados;
-      const pct = esperadas ? Math.round((e.n_notas / esperadas) * 100) : 0;
-      return el('article', { class: 'card cartao-evento' },
-        el('div', { class: 'cartao-evento-topo' },
-          el('span', { class: 'cartao-evento-data', textContent: fmtData(e.data) }),
-          selo(sit.classe, sit.texto),
-        ),
-        el('h2', { textContent: e.nome }),
-        el('p', { class: 'muted', textContent: e.local || 'Local a definir' }),
-        el('dl', { class: 'numeros-evento' },
-          el('div', {}, el('dt', { textContent: 'Coreografias' }), el('dd', { textContent: e.n_coreografias })),
-          el('div', {}, el('dt', { textContent: 'Jurados' }), el('dd', { textContent: e.n_jurados })),
-          el('div', {}, el('dt', { textContent: 'Áudios' }), el('dd', { textContent: e.n_gravacoes })),
-          el('div', {}, el('dt', { textContent: 'Notas' }), el('dd', { textContent: `${pct}%` })),
-        ),
-        el('div', { class: 'barra-progresso', title: `${e.n_notas} de ${esperadas} notas lançadas` }, el('span', { style: { width: `${pct}%` } })),
-        el('p', { class: 'muted cartao-evento-resp' }, icone('account-tie'), ` ${e.responsaveis || 'Sem responsável definido'}`),
-        el('div', { class: 'linha' },
-          el('a', { class: 'btn btn-hot', href: urlEvento(e.id) }, icone('open-in-app'), ' Abrir tela do evento'),
-          botao('Link dos jurados', 'link-variant', async () => {
-            const link = `${location.origin}/?evento=${e.id}`;
-            aviso((await copiar(link)) ? `Link do app copiado: ${link}` : `Link do app: ${link}`);
-          }),
-        ),
-      );
-    }),
+async function carregarVisaoGeral() {
+  const [r, eventos] = await Promise.all([api('GET', '/api/admin/resumo'), api('GET', '/api/admin/eventos')]);
+  $('indicadores').replaceChildren(
+    indicador(r.eventos, 'Eventos', `${r.eventos_abertos} aberto(s) · ${r.eventos_em_breve} em breve · ${r.eventos_encerrados} encerrado(s)`),
+    indicador(r.responsaveis, 'Responsáveis', `${r.admins_gerais} administrador(es) geral(is)`),
+    indicador(r.jurados_ativos, 'Jurados ativos', `${r.jurados} conta(s) no total`),
+    indicador(r.grupos, 'Grupos / escolas', `${r.coreografias} coreografia(s)`),
+    indicador(r.notas, 'Notas lançadas'),
+    indicador(r.audios, 'Áudios completos', r.audios_parciais ? `${r.audios_parciais} chegando/parcial(is)` : null),
+    indicador(fmtBytes(r.bytes_audios), 'Armazenamento de áudio', 'R2 gratuito: 10 GB'),
+    indicador(r.logins_falhos_24h, 'Logins falhos (24 h)', r.contas_bloqueadas ? `${r.contas_bloqueadas} conta(s) bloqueada(s) agora` : 'nenhuma conta bloqueada'),
   );
-}
 
-async function criarEvento(e) {
-  e.preventDefault();
-  const f = new FormData(e.target);
-  const r = await api('POST', '/api/admin/eventos', {
-    json: {
-      nome: f.get('nome'),
-      data: f.get('data'),
-      local: f.get('local'),
-      abre_em: comFuso(f.get('abre_em')),
-      fecha_em: comFuso(f.get('fecha_em')),
-      duracao_max_s: Number(f.get('duracao_max_min') || 8) * 60,
-      anonimizar_jurados: f.get('anonimizar_jurados') === 'on',
-      nota_min: f.get('nota_min'),
-      nota_max: f.get('nota_max'),
-      nota_casas: Number(f.get('nota_casas')),
-    },
-  });
-  location.href = urlEvento(r.id); // segue para a tela do evento: escala, coreografias, responsáveis
-}
+  const alertas = [];
+  if (r.eventos_sem_responsavel) alertas.push(`${r.eventos_sem_responsavel} evento(s) sem responsável: defina em "Eventos e responsáveis".`);
+  if (r.grupos_sem_evento) alertas.push(`${r.grupos_sem_evento} grupo(s) sem evento (vindos da versão anterior): revise na aba Grupos.`);
+  if (r.contas_bloqueadas) alertas.push(`${r.contas_bloqueadas} conta(s) bloqueada(s) por senha errada: "Nova senha" desbloqueia.`);
+  if (r.bytes_audios > 8 * 1073741824) alertas.push('O armazenamento de áudio passou de 8 GB (cota gratuita do R2: 10 GB).');
+  $('alertas-controle').hidden = !alertas.length;
+  $('alertas-controle').replaceChildren(...alertas.map((t) => el('p', {}, icone('alert-outline'), ` ${t}`)));
 
-/* ================================ JURADOS ================================ */
-
-async function carregarJurados({ silencioso = false } = {}) {
-  estado.jurados = await api('GET', '/api/admin/jurados');
-  $('c-jurados-total').textContent = estado.jurados.length;
-  if (silencioso && estado.secao !== 'jurados') return;
-  $('tb-jurados').replaceChildren(
-    ...(estado.jurados.length
-      ? estado.jurados.map((j) =>
-          el('tr', {},
-            el('td', { textContent: j.nome }),
-            el('td', { class: 'ident', textContent: j.email }),
-            el('td', { textContent: j.telefone || '—' }),
-            el('td', { textContent: j.eventos }),
-            el('td', {}, situacaoConta(j), el('div', { class: 'muted', textContent: j.ultimo_acesso ? `Último acesso: ${fmtHora(j.ultimo_acesso)}` : 'Nunca acessou' })),
+  $('tb-eventos').replaceChildren(
+    ...(eventos.length
+      ? eventos.map((e) => {
+          const sit = situacaoEvento(e);
+          const esperadas = e.n_coreografias * e.n_jurados;
+          const pct = esperadas ? Math.round((e.n_notas / esperadas) * 100) : 0;
+          return el('tr', {},
+            el('td', {}, el('strong', { textContent: e.nome }), el('div', { class: 'muted', textContent: `${fmtData(e.data)}${e.local ? ` · ${e.local}` : ''}` })),
+            el('td', {}, selo(sit.classe, sit.texto)),
+            el('td', {}, e.responsaveis_lista.length
+              ? e.responsaveis_lista.map((p) => el('div', { textContent: p.nome, title: p.email }))
+              : selo('bloqueado', 'sem responsável')),
+            el('td', { textContent: e.n_coreografias }),
+            el('td', { textContent: e.n_grupos }),
+            el('td', { textContent: e.n_jurados }),
+            el('td', {}, el('div', { textContent: `${pct}%` }), el('div', { class: 'barra-progresso mini' }, el('span', { style: { width: `${pct}%` } }))),
+            el('td', {}, el('div', { textContent: e.n_gravacoes }), el('div', { class: 'muted', textContent: fmtBytes(e.bytes_audios) })),
             el('td', { class: 'acoes' },
-              botao('Editar', 'pencil', () => editarJurado(j)),
-              botao('Nova senha', 'lock-reset', () => redefinirSenha('jurados', j)),
-              j.ativo
-                ? botao('Desativar', 'account-off', () => ativarJurado(j, false), 'btn btn-sec btn-perigo')
-                : botao('Reativar', 'account-check', () => ativarJurado(j, true)),
+              el('a', { class: 'btn btn-hot', href: urlEvento(e.id) }, icone('open-in-app'), ' Abrir'),
+              el('a', { class: 'btn btn-sec', href: `/admin/eventos/#evento-${e.id}` }, icone('account-tie'), ' Responsáveis'),
+              botao('Link dos jurados', 'link-variant', async () => {
+                const link = `${location.origin}/?evento=${e.id}`;
+                aviso((await copiar(link)) ? `Link do app copiado: ${link}` : `Link do app: ${link}`);
+              }),
             ),
-          ),
-        )
-      : [vazio(6, 'Nenhum jurado cadastrado.')]),
+          );
+        })
+      : [vazio(9, 'Nenhum evento ainda. Crie o primeiro em "Eventos e responsáveis".')]),
   );
 }
 
-async function criarJurado(e) {
-  e.preventDefault();
-  const f = new FormData(e.target);
-  const r = await api('POST', '/api/admin/jurados', { json: { nome: f.get('nome'), email: f.get('email'), telefone: f.get('telefone') } });
-  e.target.reset();
-  mostrarSenha(`Senha provisória de ${r.nome} (${r.email}) · app: ${r.link}`, r.senha_provisoria);
-  aviso(`${r.nome} cadastrado. Escale-o na tela do evento → aba Jurados.`);
-  await carregarJurados();
-}
-
-async function editarJurado(j) {
-  const nome = prompt('Nome do jurado:', j.nome);
-  if (nome == null) return;
-  const telefone = prompt('Telefone (deixe vazio para remover):', j.telefone || '');
-  if (telefone == null) return;
-  await api('PATCH', `/api/admin/jurados/${j.id}`, { json: { nome, telefone } });
-  aviso('Jurado atualizado.');
-  await carregarJurados();
-}
-
-async function ativarJurado(j, ativo) {
-  if (!ativo && !confirm(`Desativar a conta de ${j.nome}? Ele perde o acesso a todos os eventos na hora.`)) return;
-  await api('PATCH', `/api/admin/jurados/${j.id}`, { json: { ativo } });
-  aviso(`Conta de ${j.nome} ${ativo ? 'reativada' : 'desativada'}.`);
-  await carregarJurados();
-}
-
-async function redefinirSenha(tipo, conta) {
-  if (!confirm(`Gerar nova senha provisória para ${conta.nome}? A senha atual deixa de valer e as sessões abertas são encerradas.`)) return;
-  const r = await api('POST', `/api/admin/${tipo}/${conta.id}/redefinir-senha`);
-  mostrarSenha(`Nova senha provisória de ${conta.nome} (${r.email})`, r.senha_provisoria);
-  await (tipo === 'jurados' ? carregarJurados() : carregarAdmins());
-}
-
-/* ================================ GRUPOS ================================ */
-
-async function carregarGrupos({ silencioso = false } = {}) {
-  estado.grupos = await api('GET', '/api/admin/grupos');
-  $('c-grupos').textContent = estado.grupos.length;
-  if (silencioso && estado.secao !== 'grupos') return;
-  $('tb-grupos').replaceChildren(
-    ...(estado.grupos.length
-      ? estado.grupos.map((g) =>
-          el('tr', {},
-            el('td', {},
-              el('strong', { textContent: g.nome }),
-              el('div', { class: 'muted', textContent: [g.cidade, g.responsavel && `Resp.: ${g.responsavel}`].filter(Boolean).join(' · ') }),
-            ),
-            el('td', { class: 'equipe' },
-              linhaEquipe('Coreógrafo(a)/prof.', g.coreografo),
-              linhaEquipe('Direção', g.diretores),
-              linhaEquipe('Coordenação', g.coordenadores),
-              !g.coreografo && !g.diretores && !g.coordenadores ? el('span', { class: 'muted', textContent: '—' }) : null,
-            ),
-            el('td', {}, listaIntegrantes(g.integrantes)),
-            el('td', {}, el('div', { class: 'ident', textContent: g.email || '' }), el('div', { textContent: g.telefone || '' })),
-            el('td', { textContent: g.coreografias }),
-            el('td', { class: 'acoes' },
-              botao('Editar', 'pencil', () => editarGrupo(g)),
-              g.coreografias ? null : botao('Excluir', 'delete-outline', () => excluirGrupo(g), 'btn btn-sec btn-perigo'),
-            ),
-          ),
-        )
-      : [vazio(6, 'Nenhum grupo cadastrado. Eles também são criados ao importar o CSV de coreografias.')]),
-  );
-}
-
-const CAMPOS_GRUPO = ['nome', 'cidade', 'responsavel', 'email', 'telefone', 'integrantes', 'coreografo', 'diretores', 'coordenadores'];
-const nomesDe = (texto) => (texto ? texto.split('\n').filter(Boolean) : []);
-
-function linhaEquipe(rotulo, texto) {
-  const nomes = nomesDe(texto);
-  return nomes.length ? el('div', {}, el('span', { class: 'rotulo-equipe', textContent: `${rotulo}: ` }), nomes.join(', ')) : null;
-}
-
-function listaIntegrantes(texto) {
-  const nomes = nomesDe(texto);
-  if (!nomes.length) return el('span', { class: 'muted', textContent: '—' });
-  return el('details', { class: 'integrantes' },
-    el('summary', { textContent: `${nomes.length} integrante${nomes.length > 1 ? 's' : ''}` }),
-    el('ol', {}, ...nomes.map((n) => el('li', { textContent: n }))),
-  );
-}
-
-function editarGrupo(g) {
-  const f = $('form-grupo');
-  for (const k of ['id', ...CAMPOS_GRUPO]) f[k].value = g[k] || '';
-  $('btn-salvar-grupo').replaceChildren(icone('content-save-outline'), ' Salvar alterações');
-  $('btn-cancelar-grupo').hidden = false;
-  f.nome.focus();
-}
-
-function cancelarGrupo() {
-  $('form-grupo').reset();
-  $('form-grupo').id.value = '';
-  $('btn-salvar-grupo').replaceChildren(icone('plus'), ' Cadastrar');
-  $('btn-cancelar-grupo').hidden = true;
-}
-
-async function salvarGrupo(e) {
-  e.preventDefault();
-  const f = new FormData(e.target);
-  const id = f.get('id');
-  const dados = Object.fromEntries(CAMPOS_GRUPO.map((k) => [k, f.get(k)]));
-  if (id) await api('PATCH', `/api/admin/grupos/${id}`, { json: dados });
-  else await api('POST', '/api/admin/grupos', { json: dados });
-  aviso(`Grupo "${dados.nome}" ${id ? 'atualizado' : 'cadastrado'}.`);
-  cancelarGrupo();
-  await carregarGrupos();
-}
-
-async function excluirGrupo(g) {
-  if (!confirm(`Excluir o grupo "${g.nome}"?`)) return;
-  await api('DELETE', `/api/admin/grupos/${g.id}`);
-  aviso('Grupo excluído.');
-  await carregarGrupos();
-}
-
-/* ================================ ADMINS ================================ */
+/* ================================ ADMINISTRADORES ================================ */
 
 async function carregarAdmins() {
   const admins = await api('GET', '/api/admin/admins');
+  $('c-admins').textContent = admins.length;
   $('tb-admins').replaceChildren(
     ...admins.map((a) => {
       const souEu = a.id === estado.eu?.id;
@@ -251,7 +106,7 @@ async function carregarAdmins() {
         el('td', { class: 'ident', textContent: a.email }),
         el('td', {},
           selo(geral ? 'aprovada' : 'provisoria', geral ? 'Geral' : 'Responsável de evento'),
-          !geral ? el('div', { class: 'muted', textContent: a.eventos || 'Nenhum evento ligado ainda' }) : null,
+          !geral ? el('div', { class: 'muted', textContent: a.eventos || 'Nenhum evento ligado' }) : null,
         ),
         el('td', { textContent: fmtHora(a.ultimo_acesso) }),
         el('td', {}, situacaoConta(a)),
@@ -274,15 +129,14 @@ async function carregarAdmins() {
 async function criarAdmin(e) {
   e.preventDefault();
   const f = new FormData(e.target);
-  const r = await api('POST', '/api/admin/admins', { json: { nome: f.get('nome'), email: f.get('email'), nivel: f.get('nivel') } });
+  const r = await api('POST', '/api/admin/admins', { json: { nome: f.get('nome'), email: f.get('email'), nivel: 'geral' } });
   e.target.reset();
-  const extra = r.nivel === 'responsavel' ? ' Ligue-o a um evento na tela do evento → Responsáveis.' : '';
-  mostrarSenha(`Senha provisória de ${r.nome} (${r.email}) · acesso: ${location.origin}/admin-login/.${extra}`, r.senha_provisoria);
+  mostrarSenha(`Senha provisória de ${r.nome} (${r.email}) · acesso: ${location.origin}/admin-login/`, r.senha_provisoria);
   await carregarAdmins();
 }
 
 async function mudarNivel(a, nivel) {
-  const texto = nivel === 'geral' ? 'passará a acessar TODO o festival' : 'passará a acessar só os eventos ligados a ele';
+  const texto = nivel === 'geral' ? 'passará a acessar o painel de controle e TODOS os eventos' : 'passará a acessar só os eventos ligados a ele';
   if (!confirm(`${a.nome} ${texto}. Confirmar?`)) return;
   await api('PATCH', `/api/admin/admins/${a.id}`, { json: { nivel } });
   aviso(`Nível de ${a.nome} alterado.`);
@@ -290,10 +144,112 @@ async function mudarNivel(a, nivel) {
 }
 
 async function ativarAdmin(a, ativo) {
-  if (!ativo && !confirm(`Desativar o administrador ${a.nome}? O acesso é cortado na hora.`)) return;
+  if (!ativo && !confirm(`Desativar ${a.nome}? O acesso é cortado na hora.`)) return;
   await api('PATCH', `/api/admin/admins/${a.id}`, { json: { ativo } });
-  aviso(`Administrador ${a.nome} ${ativo ? 'reativado' : 'desativado'}.`);
+  aviso(`${a.nome} ${ativo ? 'reativado' : 'desativado'}.`);
   await carregarAdmins();
+}
+
+async function redefinirSenha(tipo, conta) {
+  if (!confirm(`Gerar nova senha provisória para ${conta.nome}? A senha atual deixa de valer e as sessões abertas são encerradas.`)) return;
+  const r = await api('POST', `/api/admin/${tipo}/${conta.id}/redefinir-senha`);
+  mostrarSenha(`Nova senha provisória de ${conta.nome} (${r.email})`, r.senha_provisoria);
+  await (tipo === 'jurados' ? carregarJurados() : carregarAdmins());
+}
+
+/* ================================ JURADOS (controle das contas) ================================ */
+
+async function carregarJurados() {
+  estado.jurados = await api('GET', '/api/admin/jurados');
+  $('c-jurados-total').textContent = estado.jurados.length;
+  renderizarJurados();
+}
+
+function renderizarJurados() {
+  const q = $('busca-jurados').value.trim().toLowerCase();
+  const lista = estado.jurados.filter((j) => !q || `${j.nome} ${j.email}`.toLowerCase().includes(q));
+  $('tb-jurados').replaceChildren(
+    ...(lista.length
+      ? lista.map((j) =>
+          el('tr', {},
+            el('td', { textContent: j.nome }),
+            el('td', { class: 'ident', textContent: j.email }),
+            el('td', { textContent: j.telefone || '—' }),
+            el('td', { textContent: j.eventos }),
+            el('td', {}, situacaoConta(j), el('div', { class: 'muted', textContent: j.ultimo_acesso ? `Último acesso: ${fmtHora(j.ultimo_acesso)}` : 'Nunca acessou' })),
+            el('td', { class: 'acoes' },
+              botao('Nova senha', 'lock-reset', () => redefinirSenha('jurados', j)),
+              j.ativo
+                ? botao('Desativar conta', 'account-off', () => ativarJurado(j, false), 'btn btn-sec btn-perigo')
+                : botao('Reativar conta', 'account-check', () => ativarJurado(j, true)),
+            ),
+          ),
+        )
+      : [vazio(6, estado.jurados.length ? 'Nenhum jurado com essa busca.' : 'Nenhum jurado cadastrado ainda (o cadastro é feito na tela de cada evento).')]),
+  );
+}
+
+async function ativarJurado(j, ativo) {
+  if (!ativo && !confirm(`Desativar a conta de ${j.nome}? Ele perde o acesso a TODOS os eventos na hora.`)) return;
+  await api('PATCH', `/api/admin/jurados/${j.id}`, { json: { ativo } });
+  aviso(`Conta de ${j.nome} ${ativo ? 'reativada' : 'desativada'}.`);
+  await carregarJurados();
+}
+
+/* ================================ GRUPOS (visão de todos os eventos) ================================ */
+
+const nomesDe = (texto) => (texto ? texto.split('\n').filter(Boolean) : []);
+
+function linhaEquipe(rotulo, texto) {
+  const nomes = nomesDe(texto);
+  return nomes.length ? el('div', {}, el('span', { class: 'rotulo-equipe', textContent: `${rotulo}: ` }), nomes.join(', ')) : null;
+}
+
+function listaIntegrantes(texto) {
+  const nomes = nomesDe(texto);
+  if (!nomes.length) return el('span', { class: 'muted', textContent: '—' });
+  return el('details', { class: 'integrantes' },
+    el('summary', { textContent: `${nomes.length} integrante${nomes.length > 1 ? 's' : ''}` }),
+    el('ol', {}, ...nomes.map((n) => el('li', { textContent: n }))),
+  );
+}
+
+async function carregarGrupos() {
+  estado.grupos = await api('GET', '/api/admin/grupos');
+  $('c-grupos').textContent = estado.grupos.length;
+  renderizarGrupos();
+}
+
+function renderizarGrupos() {
+  const q = $('busca-grupos').value.trim().toLowerCase();
+  const lista = estado.grupos.filter((g) => !q || `${g.nome} ${g.cidade || ''} ${g.evento || ''}`.toLowerCase().includes(q));
+  $('tb-grupos').replaceChildren(
+    ...(lista.length
+      ? lista.map((g) =>
+          el('tr', {},
+            el('td', {}, el('strong', { textContent: g.nome }), el('div', { class: 'muted', textContent: [g.cidade, g.responsavel && `Resp.: ${g.responsavel}`].filter(Boolean).join(' · ') })),
+            el('td', {}, g.evento_id ? el('a', { class: 'link-udx', href: urlEvento(g.evento_id), textContent: g.evento }) : selo('bloqueado', 'sem evento')),
+            el('td', { class: 'equipe' },
+              linhaEquipe('Coreógrafo(a)/prof.', g.coreografo), linhaEquipe('Direção', g.diretores), linhaEquipe('Coordenação', g.coordenadores),
+              !g.coreografo && !g.diretores && !g.coordenadores ? el('span', { class: 'muted', textContent: '—' }) : null,
+            ),
+            el('td', {}, listaIntegrantes(g.integrantes)),
+            el('td', { textContent: g.coreografias }),
+            el('td', { class: 'acoes' },
+              !g.evento_id && !g.coreografias ? botao('Excluir', 'delete-outline', () => excluirGrupo(g), 'btn btn-sec btn-perigo') : null,
+              g.evento_id ? el('a', { class: 'btn btn-sec', href: `${urlEvento(g.evento_id)}#grupos` }, icone('open-in-app'), ' No evento') : null,
+            ),
+          ),
+        )
+      : [vazio(6, estado.grupos.length ? 'Nenhum grupo com essa busca.' : 'Nenhum grupo cadastrado ainda.')]),
+  );
+}
+
+async function excluirGrupo(g) {
+  if (!confirm(`Excluir o grupo "${g.nome}" (sem evento)?`)) return;
+  await api('DELETE', `/api/admin/grupos/${g.id}`);
+  aviso('Grupo excluído.');
+  await carregarGrupos();
 }
 
 /* ================================ AUDITORIA ================================ */
@@ -319,12 +275,10 @@ async function carregarAuditoriaGeral() {
 
 async function iniciar() {
   document.querySelectorAll('[data-secao]').forEach((b) => b.addEventListener('click', () => trocarSecao(b.dataset.secao)));
-  $('form-evento').addEventListener('submit', (e) => tentar(() => criarEvento(e)));
-  $('btn-atualizar').addEventListener('click', () => tentar(carregarEventos));
-  $('form-jurado').addEventListener('submit', (e) => tentar(() => criarJurado(e)));
-  $('form-grupo').addEventListener('submit', (e) => tentar(() => salvarGrupo(e)));
-  $('btn-cancelar-grupo').addEventListener('click', cancelarGrupo);
+  $('btn-atualizar').addEventListener('click', () => trocarSecao(estado.secao));
   $('form-admin').addEventListener('submit', (e) => tentar(() => criarAdmin(e)));
+  $('busca-jurados').addEventListener('input', renderizarJurados);
+  $('busca-grupos').addEventListener('input', renderizarGrupos);
   $('form-conta-senha').addEventListener('submit', (e) => tentar(() => trocarMinhaSenha(e)));
   $('btnSair').addEventListener('click', () => tentar(sair));
   ligarCaixaSenha();
@@ -332,7 +286,7 @@ async function iniciar() {
   await tentar(async () => {
     estado.eu = await api('GET', '/api/admin/me');
     if (estado.eu.nivel !== 'geral') {
-      location.replace('/admin/evento/'); // responsável de evento: só a tela do evento
+      location.replace('/admin/eventos/'); // responsável de evento: os seus eventos
       return;
     }
     $('adminEmail').textContent = estado.eu.email;
@@ -340,8 +294,7 @@ async function iniciar() {
     $('conta-nome').textContent = estado.eu.nome;
     $('conta-email').textContent = estado.eu.email;
     $('conta-usuario').value = estado.eu.email;
-    await Promise.all([carregarJurados({ silencioso: true }), carregarGrupos({ silencioso: true })]);
-    await trocarSecao(ler(CHAVE_SECAO) || 'eventos');
+    await trocarSecao(ler(CHAVE_SECAO) || 'geral');
   });
 }
 

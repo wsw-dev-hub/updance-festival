@@ -87,8 +87,9 @@ export default defineConfig(async ({ command }) => ({
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),                          // app do jurado (PWA)
-        admin: resolve(__dirname, 'admin/index.html'),                   // dashboard da organização
+        admin: resolve(__dirname, 'admin/index.html'),                   // painel de controle (geral)
         'admin-evento': resolve(__dirname, 'admin/evento/index.html'),   // tela exclusiva de cada evento
+        'admin-eventos': resolve(__dirname, 'admin/eventos/index.html'), // eventos e responsáveis
         'admin-login': resolve(__dirname, 'admin-login/index.html'),     // login da organização
         'reset-senha': resolve(__dirname, 'reset-senha/index.html'),     // nova senha pelo link do e-mail
         404: resolve(__dirname, '404.html'),                             // not_found_handling = "404-page"

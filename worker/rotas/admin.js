@@ -1,9 +1,11 @@
 // Área de administração do UpDance Festival. Todas as rotas exigem sessão de admin (cookie a_session).
 //
 // Níveis (worker/lib/permissoes.js):
-//   geral        → dashboard completo: contas (admins, jurados), grupos, todos os eventos
-//   responsavel  → tela exclusiva dos SEUS eventos: dados do evento, escala, coreografias,
-//                  gravações, notas, ranking, links de entrega e auditoria do evento
+//   geral        → dashboard de controle geral: visão de todos os eventos, contas (admins, jurados),
+//                  grupos, auditoria. Também cria eventos e acessa a tela de qualquer evento.
+//   responsavel  → autonomia sobre os SEUS eventos: cria eventos (e vira responsável por eles),
+//                  cadastra responsáveis, grupos/escolas, jurados e coreografias do evento,
+//                  acompanha notas, ranking e áudios, gera links de entrega.
 
 import { json, lerJson, lerTexto, ErroHttp, disposicao, CABECALHOS_SEGURANCA } from '../lib/http.js';
 import { exigirAdmin } from '../lib/sessao.js';
@@ -64,7 +66,7 @@ export function formacaoDe(valor, integrantes) {
 }
 
 async function umOu404(env, sql, id, rotulo) {
-  const r = await env.DB.prepare(sql).bind(id).first();
+  const r = await env.DB.prepare(sql).bind(...(Array.isArray(id) ? id : [id])).first();
   if (!r) throw new ErroHttp(404, `${rotulo} não encontrado(a)`, 'nao_encontrado');
   return r;
 }
@@ -73,6 +75,35 @@ const eventoOu404 = (env, id) => umOu404(env, 'SELECT * FROM eventos WHERE id = 
 /** Resposta com senha provisória (mostrada uma única vez). */
 function comSenha(dados, senha, status = 200) {
   return json({ ...dados, senha_provisoria: senha }, status);
+}
+
+/* ================================ DASHBOARD DE CONTROLE (somente geral) ================================ */
+
+/* GET /api/admin/resumo — números do sistema inteiro */
+export async function resumoGeral(request, env) {
+  await exigirGeral(request, env);
+  const agora = Date.now();
+  const r = await env.DB.prepare(
+    `SELECT (SELECT COUNT(*) FROM eventos) AS eventos,
+            (SELECT COUNT(*) FROM eventos WHERE abre_em > ?1) AS eventos_em_breve,
+            (SELECT COUNT(*) FROM eventos WHERE abre_em <= ?1 AND fecha_em >= ?1) AS eventos_abertos,
+            (SELECT COUNT(*) FROM eventos WHERE fecha_em < ?1) AS eventos_encerrados,
+            (SELECT COUNT(*) FROM eventos e WHERE NOT EXISTS (SELECT 1 FROM evento_responsaveis er WHERE er.evento_id = e.id)) AS eventos_sem_responsavel,
+            (SELECT COUNT(*) FROM coreografias) AS coreografias,
+            (SELECT COUNT(*) FROM grupos) AS grupos,
+            (SELECT COUNT(*) FROM grupos WHERE evento_id IS NULL) AS grupos_sem_evento,
+            (SELECT COUNT(*) FROM jurados) AS jurados,
+            (SELECT COUNT(*) FROM jurados WHERE ativo = 1) AS jurados_ativos,
+            (SELECT COUNT(*) FROM admins WHERE nivel = 'geral' AND ativo = 1) AS admins_gerais,
+            (SELECT COUNT(*) FROM admins WHERE nivel = 'responsavel' AND ativo = 1) AS responsaveis,
+            (SELECT COUNT(*) FROM admins WHERE bloqueado_ate > ?1) + (SELECT COUNT(*) FROM jurados WHERE bloqueado_ate > ?1) AS contas_bloqueadas,
+            (SELECT COUNT(*) FROM gravacoes WHERE status = 'completo') AS audios,
+            (SELECT COUNT(*) FROM gravacoes WHERE status <> 'completo') AS audios_parciais,
+            (SELECT COALESCE(SUM(tamanho), 0) FROM gravacoes) AS bytes_audios,
+            (SELECT COUNT(*) FROM notas) AS notas,
+            (SELECT COUNT(*) FROM auditoria WHERE acao LIKE 'login_%_falhou' AND criado_em > ?2) AS logins_falhos_24h`,
+  ).bind(agora, agora - 86400_000).first();
+  return json({ ...r, gerado_em: agora });
 }
 
 /* ================================ ADMINS (somente geral) ================================ */
@@ -187,26 +218,41 @@ async function novoJurado(env, { nome, email: e, telefone, criadoPor }) {
   return { id, senha };
 }
 
-/* POST /api/admin/jurados  { nome, email, telefone? }  (geral) */
-export async function criarJurado(request, env) {
-  const a = await exigirGeral(request, env);
-  const b = await lerJson(request);
-  const nome = texto(b.nome, 120);
-  const e = email(b.email);
-  const telefone = texto(b.telefone, 40, false) || null;
-  if (await env.DB.prepare('SELECT 1 FROM jurados WHERE email = ?1').bind(e).first()) {
-    throw new ErroHttp(409, 'Já existe um jurado com este e-mail', 'email_existente');
-  }
-  const { id, senha } = await novoJurado(env, { nome, email: e, telefone, criadoPor: a.email });
-  await auditar(env, request, { ator: a.ator, acao: 'jurado_criado', alvo: e });
-  return comSenha({ id, nome, email: e, link: `${new URL(request.url).origin}/` }, senha, 201);
+/** Jurado escalado em algum evento do responsável? (geral: sempre) */
+async function juradoAoAlcance(env, a, juradoId) {
+  if (a.nivel === 'geral') return true;
+  return !!(await env.DB.prepare(
+    `SELECT 1 FROM evento_jurados ej JOIN evento_responsaveis er ON er.evento_id = ej.evento_id
+      WHERE ej.jurado_id = ?1 AND er.admin_id = ?2`,
+  ).bind(juradoId, a.id).first());
 }
 
-/* PATCH /api/admin/jurados/:id  { nome?, telefone?, ativo? }  (geral) */
+/** Responsável só altera conta (nome, senha) de quem atua APENAS em eventos dele.
+    Conta compartilhada com evento de outra equipe: só a administração geral mexe
+    (senão, redefinir a senha daria acesso aos eventos alheios). */
+async function exigirContaExclusiva(env, a, tabelaVinculo, colunaConta, contaId) {
+  if (a.nivel === 'geral') return;
+  const fora = await env.DB.prepare(
+    `SELECT 1 FROM ${tabelaVinculo} v
+      WHERE v.${colunaConta} = ?1
+        AND v.evento_id NOT IN (SELECT evento_id FROM evento_responsaveis WHERE admin_id = ?2) LIMIT 1`,
+  ).bind(contaId, a.id).first();
+  if (fora) {
+    throw new ErroHttp(403, 'Esta pessoa também atua em evento de outra equipe. Peça à administração geral do festival.', 'conta_compartilhada');
+  }
+}
+
+/* PATCH /api/admin/jurados/:id  { nome?, telefone?, ativo? }
+   Responsável: nome e telefone dos jurados dos seus eventos. Desativar a conta (todos os eventos): só geral. */
 export async function atualizarJurado(request, env, { id }) {
-  const a = await exigirGeral(request, env);
+  const a = await exigirAdmin(request, env);
   const j = await umOu404(env, 'SELECT * FROM jurados WHERE id = ?1', id, 'Jurado');
+  if (!(await juradoAoAlcance(env, a, id))) throw new ErroHttp(404, 'Jurado não encontrado(a)', 'nao_encontrado');
   const b = await lerJson(request);
+  if (b.ativo !== undefined && a.nivel !== 'geral') {
+    throw new ErroHttp(403, 'Para tirar o jurado do evento, use "Suspender" na escala', 'somente_geral');
+  }
+  await exigirContaExclusiva(env, a, 'evento_jurados', 'jurado_id', id);
   const nome = b.nome !== undefined ? texto(b.nome, 120) : j.nome;
   const telefone = b.telefone !== undefined ? texto(b.telefone, 40, false) || null : j.telefone;
   const ativo = b.ativo !== undefined ? (b.ativo ? 1 : 0) : j.ativo;
@@ -222,13 +268,8 @@ export async function atualizarJurado(request, env, { id }) {
 export async function redefinirSenhaJurado(request, env, { id }) {
   const a = await exigirAdmin(request, env);
   const j = await umOu404(env, 'SELECT * FROM jurados WHERE id = ?1', id, 'Jurado');
-  if (a.nivel !== 'geral') {
-    const ok = await env.DB.prepare(
-      `SELECT 1 FROM evento_jurados ej JOIN evento_responsaveis er ON er.evento_id = ej.evento_id
-        WHERE ej.jurado_id = ?1 AND er.admin_id = ?2`,
-    ).bind(id, a.id).first();
-    if (!ok) throw new ErroHttp(404, 'Jurado não encontrado(a)', 'nao_encontrado');
-  }
+  if (!(await juradoAoAlcance(env, a, id))) throw new ErroHttp(404, 'Jurado não encontrado(a)', 'nao_encontrado');
+  await exigirContaExclusiva(env, a, 'evento_jurados', 'jurado_id', id);
   const senha = await redefinirConta(env, 'jurados', id);
   await auditar(env, request, { ator: a.ator, acao: 'jurado_senha_redefinida', alvo: j.email });
   return comSenha({ id, email: j.email }, senha);
@@ -236,13 +277,26 @@ export async function redefinirSenhaJurado(request, env, { id }) {
 
 /* ================================ GRUPOS ================================ */
 
-/* GET /api/admin/grupos  (qualquer admin: usado no cadastro de coreografias) */
+/** Chave única do grupo: nome sem acento/caixa DENTRO do evento ("evento|nome"). */
+const chaveGrupo = (eventoId, nome) => `${eventoId}|${chaveNome(nome)}`;
+
+/* GET /api/admin/grupos — todos os grupos, de todos os eventos (somente geral: controle) */
 export async function listarGrupos(request, env) {
-  await exigirAdmin(request, env);
+  await exigirGeral(request, env);
+  const { results } = await env.DB.prepare(
+    `SELECT g.*, e.nome AS evento, (SELECT COUNT(*) FROM coreografias c WHERE c.grupo_id = g.id) AS coreografias
+       FROM grupos g LEFT JOIN eventos e ON e.id = g.evento_id ORDER BY e.data DESC, g.nome`,
+  ).all();
+  return json(results);
+}
+
+/* GET /api/admin/eventos/:id/grupos — grupos/escolas do evento */
+export async function listarGruposEvento(request, env, { id }) {
+  await exigirEvento(request, env, id);
   const { results } = await env.DB.prepare(
     `SELECT g.*, (SELECT COUNT(*) FROM coreografias c WHERE c.grupo_id = g.id) AS coreografias
-       FROM grupos g ORDER BY g.nome`,
-  ).all();
+       FROM grupos g WHERE g.evento_id = ?1 ORDER BY g.nome`,
+  ).bind(id).all();
   return json(results);
 }
 
@@ -277,64 +331,67 @@ function camposGrupo(b, atual = {}) {
   return { nome, cidade: pegar('cidade', 120), responsavel: pegar('responsavel', 120), email: em, telefone: pegar('telefone', 40), ...equipe };
 }
 
-/* POST /api/admin/grupos  (qualquer admin) */
-export async function criarGrupo(request, env) {
-  const a = await exigirAdmin(request, env);
+/* POST /api/admin/eventos/:id/grupos — cadastra grupo/escola no evento */
+export async function criarGrupo(request, env, { id: eventoId }) {
+  const a = await exigirEvento(request, env, eventoId);
+  await eventoOu404(env, eventoId);
   const g = camposGrupo(await lerJson(request));
-  const chave = chaveNome(g.nome);
+  const chave = chaveGrupo(eventoId, g.nome);
   if (await env.DB.prepare('SELECT 1 FROM grupos WHERE nome_chave = ?1').bind(chave).first()) {
-    throw new ErroHttp(409, 'Já existe um grupo com este nome', 'grupo_existente');
+    throw new ErroHttp(409, 'Já existe um grupo com este nome neste evento', 'grupo_existente');
   }
   const id = aleatorio(12);
   await env.DB.prepare(
-    `INSERT INTO grupos (id, nome, nome_chave, cidade, responsavel, email, telefone, criado_em, integrantes, coreografo, diretores, coordenadores)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`,
+    `INSERT INTO grupos (id, nome, nome_chave, cidade, responsavel, email, telefone, criado_em, integrantes, coreografo, diretores, coordenadores, evento_id)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`,
   )
-    .bind(id, g.nome, chave, g.cidade, g.responsavel, g.email, g.telefone, Date.now(), g.integrantes, g.coreografo, g.diretores, g.coordenadores)
+    .bind(id, g.nome, chave, g.cidade, g.responsavel, g.email, g.telefone, Date.now(), g.integrantes, g.coreografo, g.diretores, g.coordenadores, eventoId)
     .run();
-  await auditar(env, request, { ator: a.ator, acao: 'grupo_criado', alvo: g.nome });
-  return json({ id, ...g }, 201);
+  await auditar(env, request, { eventoId, ator: a.ator, acao: 'grupo_criado', alvo: g.nome });
+  return json({ id, evento_id: eventoId, ...g }, 201);
 }
 
-/* PATCH /api/admin/grupos/:id  (geral) */
+const sqlGrupo = 'SELECT * FROM grupos WHERE id = ?1';
+
+/* PATCH /api/admin/grupos/:id — responsável do evento do grupo (ou geral) */
 export async function atualizarGrupo(request, env, { id }) {
-  const a = await exigirGeral(request, env);
-  const atual = await umOu404(env, 'SELECT * FROM grupos WHERE id = ?1', id, 'Grupo');
+  const { a, linha: atual } = await exigirRegistroDoEvento(request, env, sqlGrupo, id, 'Grupo');
   const g = camposGrupo(await lerJson(request), atual);
-  const chave = chaveNome(g.nome);
+  const chave = chaveGrupo(atual.evento_id || 'sem-evento', g.nome);
   const conflito = await env.DB.prepare('SELECT id FROM grupos WHERE nome_chave = ?1 AND id <> ?2').bind(chave, id).first();
-  if (conflito) throw new ErroHttp(409, 'Já existe um grupo com este nome', 'grupo_existente');
+  if (conflito) throw new ErroHttp(409, 'Já existe um grupo com este nome neste evento', 'grupo_existente');
   await env.DB.prepare(
     `UPDATE grupos SET nome = ?1, nome_chave = ?2, cidade = ?3, responsavel = ?4, email = ?5, telefone = ?6,
                        integrantes = ?7, coreografo = ?8, diretores = ?9, coordenadores = ?10 WHERE id = ?11`,
   )
     .bind(g.nome, chave, g.cidade, g.responsavel, g.email, g.telefone, g.integrantes, g.coreografo, g.diretores, g.coordenadores, id)
     .run();
-  await auditar(env, request, { ator: a.ator, acao: 'grupo_atualizado', alvo: g.nome });
-  return json({ id, ...g });
+  await auditar(env, request, { eventoId: atual.evento_id, ator: a.ator, acao: 'grupo_atualizado', alvo: g.nome });
+  return json({ id, evento_id: atual.evento_id, ...g });
 }
 
-/* DELETE /api/admin/grupos/:id — só sem coreografias vinculadas (geral) */
+/* DELETE /api/admin/grupos/:id — só sem coreografias vinculadas */
 export async function excluirGrupo(request, env, { id }) {
-  const a = await exigirGeral(request, env);
-  const g = await umOu404(env, 'SELECT * FROM grupos WHERE id = ?1', id, 'Grupo');
+  const { a, linha: g } = await exigirRegistroDoEvento(request, env, sqlGrupo, id, 'Grupo');
   const { n } = await env.DB.prepare('SELECT COUNT(*) AS n FROM coreografias WHERE grupo_id = ?1').bind(id).first();
   if (n) throw new ErroHttp(409, `O grupo tem ${n} coreografia(s) vinculada(s)`, 'grupo_em_uso');
   await env.DB.prepare('DELETE FROM grupos WHERE id = ?1').bind(id).run();
-  await auditar(env, request, { ator: a.ator, acao: 'grupo_excluido', alvo: g.nome });
+  await auditar(env, request, { eventoId: g.evento_id, ator: a.ator, acao: 'grupo_excluido', alvo: g.nome });
   return json({ ok: true });
 }
 
-/** Encontra o grupo pelo nome (ignorando acento/caixa) ou cria. */
-async function grupoPorNome(env, nome, cache) {
+/** Encontra o grupo do evento pelo nome (ignorando acento/caixa) ou cria. */
+async function grupoPorNome(env, eventoId, nome, cache) {
   const n = texto(nome, 160, false);
   if (!n) return null;
-  const chave = chaveNome(n);
+  const chave = chaveGrupo(eventoId, n);
   if (cache.has(chave)) return cache.get(chave);
   let g = await env.DB.prepare('SELECT id FROM grupos WHERE nome_chave = ?1').bind(chave).first();
   if (!g) {
     g = { id: aleatorio(12) };
-    await env.DB.prepare('INSERT INTO grupos (id, nome, nome_chave, criado_em) VALUES (?1, ?2, ?3, ?4)').bind(g.id, n, chave, Date.now()).run();
+    await env.DB.prepare('INSERT INTO grupos (id, nome, nome_chave, criado_em, evento_id) VALUES (?1, ?2, ?3, ?4, ?5)')
+      .bind(g.id, n, chave, Date.now(), eventoId)
+      .run();
   }
   cache.set(chave, g.id);
   return g.id;
@@ -367,10 +424,22 @@ function camposEvento(b, atual = null) {
   };
 }
 
-/* POST /api/admin/eventos  (geral) */
+/* POST /api/admin/eventos  { ...campos, responsaveis?: [{ nome, email }] }
+   Geral ou responsável. Quem é responsável e cria o evento passa a ser responsável por ele.
+   Contas novas de responsável voltam com senha provisória (mostrada uma única vez). */
 export async function criarEvento(request, env) {
-  const a = await exigirGeral(request, env);
-  const ev = camposEvento(await lerJson(request));
+  const a = await exigirAdmin(request, env);
+  const b = await lerJson(request);
+  const ev = camposEvento(b);
+  const pedidos = Array.isArray(b.responsaveis) ? b.responsaveis.filter((r) => r && (r.email || '').trim()) : [];
+  if (pedidos.length > 10) throw new ErroHttp(422, 'Máximo de 10 responsáveis por vez', 'lista_longa');
+  const emails = pedidos.map((r) => email(r.email)); // valida tudo antes de gravar
+  if (new Set(emails).size !== emails.length) throw new ErroHttp(422, 'E-mail de responsável repetido', 'email_repetido');
+  for (const [i, e] of emails.entries()) {
+    const existente = await env.DB.prepare('SELECT nivel FROM admins WHERE email = ?1').bind(e).first();
+    if (existente?.nivel === 'geral') throw new ErroHttp(409, `${e} é administrador geral (já acessa todos os eventos)`, 'ja_geral');
+    if (!existente) texto(pedidos[i].nome, 120); // conta nova precisa de nome
+  }
   const id = aleatorio(12);
   await env.DB.prepare(
     `INSERT INTO eventos (id, nome, data, local, fuso, abre_em, fecha_em, anonimizar_jurados, duracao_max_s, criado_por, criado_em,
@@ -381,7 +450,18 @@ export async function criarEvento(request, env) {
       ev.nota_min, ev.nota_max, ev.nota_casas)
     .run();
   await auditar(env, request, { eventoId: id, ator: a.ator, acao: 'evento_criado', alvo: id, detalhes: { nome: ev.nome } });
-  return json({ id, ...ev }, 201);
+  const responsaveis = [];
+  if (a.nivel !== 'geral') {
+    await env.DB.prepare('INSERT INTO evento_responsaveis (evento_id, admin_id, criado_por, criado_em) VALUES (?1, ?2, ?3, ?4)')
+      .bind(id, a.id, a.email, Date.now())
+      .run();
+    responsaveis.push({ id: a.id, nome: a.nome, email: a.email, criado: false, voce: true });
+  }
+  for (const r of pedidos) {
+    if (email(r.email) === a.email) continue;
+    responsaveis.push(await vincularResponsavel(env, request, a, id, r));
+  }
+  return json({ id, ...ev, responsaveis, link_login: `${new URL(request.url).origin}/admin-login/` }, 201);
 }
 
 /* PATCH /api/admin/eventos/:id  (geral ou responsável do evento) */
@@ -411,13 +491,19 @@ export async function listarEventos(request, env) {
             (SELECT COUNT(*) FROM gravacoes g WHERE g.evento_id = e.id AND g.status = 'completo') AS n_gravacoes,
             (SELECT COUNT(*) FROM notas n JOIN evento_jurados ej ON ej.evento_id = n.evento_id AND ej.jurado_id = n.jurado_id AND ej.ativo = 1
               WHERE n.evento_id = e.id) AS n_notas,
-            (SELECT GROUP_CONCAT(ad.nome, ', ') FROM evento_responsaveis er JOIN admins ad ON ad.id = er.admin_id
-              WHERE er.evento_id = e.id) AS responsaveis
+            (SELECT COUNT(*) FROM grupos gr WHERE gr.evento_id = e.id) AS n_grupos,
+            (SELECT COALESCE(SUM(g.tamanho), 0) FROM gravacoes g WHERE g.evento_id = e.id) AS bytes_audios,
+            (SELECT json_group_array(json_object('id', ad.id, 'nome', ad.nome, 'email', ad.email, 'ativo', ad.ativo,
+                                                 'trocar_senha', ad.trocar_senha, 'ultimo_acesso', ad.ultimo_acesso))
+               FROM evento_responsaveis er JOIN admins ad ON ad.id = er.admin_id WHERE er.evento_id = e.id) AS responsaveis_json
        FROM eventos e ${filtro}
       ORDER BY e.data DESC, e.criado_em DESC`,
   );
   const { results } = await (a.nivel === 'geral' ? stmt : stmt.bind(a.id)).all();
-  return json(results);
+  return json(results.map(({ responsaveis_json: rj, ...e }) => {
+    const lista = JSON.parse(rj || '[]').filter((r) => r.id);
+    return { ...e, responsaveis_lista: lista, responsaveis: lista.map((r) => r.nome).join(', ') };
+  }));
 }
 
 /* GET /api/admin/eventos/:id */
@@ -433,7 +519,7 @@ export async function detalharEvento(request, env, { id }) {
         WHERE c.evento_id = ?1 ORDER BY c.numero`,
     ).bind(id),
     env.DB.prepare(
-      `SELECT j.id, j.nome, j.email, j.ativo AS conta_ativa, j.trocar_senha, j.ultimo_acesso, ej.ordem, ej.ativo
+      `SELECT j.id, j.nome, j.email, j.telefone, j.ativo AS conta_ativa, j.trocar_senha, j.ultimo_acesso, ej.ordem, ej.ativo
          FROM evento_jurados ej JOIN jurados j ON j.id = ej.jurado_id
         WHERE ej.evento_id = ?1 ORDER BY ej.ordem`,
     ).bind(id),
@@ -500,42 +586,66 @@ export async function atualizarEscala(request, env, { id, jurado }) {
   return json({ ok: true, ativo: !!ativo });
 }
 
-/* ------------------------------ responsáveis do evento (geral) ------------------------------ */
+/* ------------------------------ responsáveis do evento ------------------------------
+   Geral ou responsável do próprio evento: cada responsável controla quem mais administra o evento. */
 
-/* POST /api/admin/eventos/:id/responsaveis  { nome, email }
-   Liga um responsável ao evento. Se o e-mail não tiver conta, cria (nível "responsavel", senha provisória). */
-export async function adicionarResponsavel(request, env, { id }) {
-  const a = await exigirGeral(request, env);
-  await eventoOu404(env, id);
-  const b = await lerJson(request);
-  const e = email(b.email);
+/** Liga (e se preciso cria) um responsável ao evento. Devolve os dados, com senha provisória se a conta é nova. */
+async function vincularResponsavel(env, request, a, eventoId, { nome, email: em }) {
+  const e = email(em);
   let alvo = await env.DB.prepare('SELECT id, nome, email, nivel FROM admins WHERE email = ?1').bind(e).first();
   let senha = null;
   if (alvo?.nivel === 'geral') throw new ErroHttp(409, 'Este e-mail é de um administrador geral (já acessa todos os eventos)', 'ja_geral');
   if (!alvo) {
-    const nome = texto(b.nome, 120);
-    const criado = await novoAdmin(env, { nome, email: e, nivel: 'responsavel', criadoPor: a.email });
-    alvo = { id: criado.id, nome, email: e };
+    const n = texto(nome, 120);
+    const criado = await novoAdmin(env, { nome: n, email: e, nivel: 'responsavel', criadoPor: a.email });
+    alvo = { id: criado.id, nome: n, email: e };
     senha = criado.senha;
-    await auditar(env, request, { ator: a.ator, acao: 'admin_criado', alvo: e, detalhes: { nivel: 'responsavel' } });
+    await auditar(env, request, { eventoId, ator: a.ator, acao: 'admin_criado', alvo: e, detalhes: { nivel: 'responsavel' } });
   }
   const r = await env.DB.prepare('INSERT OR IGNORE INTO evento_responsaveis (evento_id, admin_id, criado_por, criado_em) VALUES (?1, ?2, ?3, ?4)')
-    .bind(id, alvo.id, a.email, Date.now())
+    .bind(eventoId, alvo.id, a.email, Date.now())
     .run();
   if (!r.meta.changes) throw new ErroHttp(409, 'Esta pessoa já é responsável pelo evento', 'ja_responsavel');
-  await auditar(env, request, { eventoId: id, ator: a.ator, acao: 'responsavel_adicionado', alvo: e });
-  const resp = { ok: true, id: alvo.id, nome: alvo.nome, email: e, criado: !!senha, link: `${new URL(request.url).origin}/admin-login/` };
-  return senha ? comSenha(resp, senha, 201) : json(resp, 201);
+  await auditar(env, request, { eventoId, ator: a.ator, acao: 'responsavel_adicionado', alvo: e });
+  return { id: alvo.id, nome: alvo.nome, email: e, criado: !!senha, ...(senha ? { senha_provisoria: senha } : {}) };
 }
 
-/* DELETE /api/admin/eventos/:id/responsaveis/:admin */
+/* POST /api/admin/eventos/:id/responsaveis  { nome, email } */
+export async function adicionarResponsavel(request, env, { id }) {
+  const a = await exigirEvento(request, env, id);
+  await eventoOu404(env, id);
+  const r = await vincularResponsavel(env, request, a, id, await lerJson(request));
+  return json({ ok: true, ...r, link: `${new URL(request.url).origin}/admin-login/` }, 201);
+}
+
+/* DELETE /api/admin/eventos/:id/responsaveis/:admin
+   Responsável pode tirar outros (ou a si mesmo), desde que o evento continue com pelo menos um. */
 export async function removerResponsavel(request, env, { id, admin }) {
-  const a = await exigirGeral(request, env);
+  const a = await exigirEvento(request, env, id);
+  if (a.nivel !== 'geral') {
+    const { n } = await env.DB.prepare('SELECT COUNT(*) AS n FROM evento_responsaveis WHERE evento_id = ?1').bind(id).first();
+    if (n <= 1) throw new ErroHttp(422, 'O evento precisa de pelo menos um responsável', 'ultimo_responsavel');
+  }
   const r = await env.DB.prepare('DELETE FROM evento_responsaveis WHERE evento_id = ?1 AND admin_id = ?2').bind(id, admin).run();
   if (!r.meta.changes) throw new ErroHttp(404, 'Responsável não encontrado', 'nao_encontrado');
   await env.DB.prepare('UPDATE admins SET sessao_versao = sessao_versao + 1 WHERE id = ?1').bind(admin).run();
   await auditar(env, request, { eventoId: id, ator: a.ator, acao: 'responsavel_removido', alvo: admin });
   return json({ ok: true });
+}
+
+/* POST /api/admin/eventos/:id/responsaveis/:admin/redefinir-senha — senha provisória para outro responsável do evento */
+export async function redefinirSenhaResponsavel(request, env, { id, admin }) {
+  const a = await exigirEvento(request, env, id);
+  const alvo = await env.DB.prepare(
+    `SELECT ad.* FROM evento_responsaveis er JOIN admins ad ON ad.id = er.admin_id
+      WHERE er.evento_id = ?1 AND er.admin_id = ?2 AND ad.nivel = 'responsavel'`,
+  ).bind(id, admin).first();
+  if (!alvo) throw new ErroHttp(404, 'Responsável não encontrado', 'nao_encontrado');
+  if (alvo.id === a.id) throw new ErroHttp(422, 'Para a sua conta, use "Minha conta → Trocar senha"', 'auto_redefinicao');
+  await exigirContaExclusiva(env, a, 'evento_responsaveis', 'admin_id', alvo.id);
+  const senha = await redefinirConta(env, 'admins', alvo.id);
+  await auditar(env, request, { eventoId: id, ator: a.ator, acao: 'responsavel_senha_redefinida', alvo: alvo.email });
+  return comSenha({ id: alvo.id, email: alvo.email }, senha);
 }
 
 /* ================================ COREOGRAFIAS ================================ */
@@ -586,7 +696,9 @@ export async function adicionarCoreografias(request, env, { id }) {
     const numero = Number.parseInt(b.numero, 10);
     if (!Number.isFinite(numero) || numero < 0) throw new ErroHttp(422, 'Número inválido', 'numero_invalido');
     const nome = texto(b.nome, 200);
-    const grupoId = b.grupo_id ? (await umOu404(env, 'SELECT id FROM grupos WHERE id = ?1', String(b.grupo_id), 'Grupo')).id : null;
+    const grupoId = b.grupo_id
+      ? (await umOu404(env, 'SELECT id FROM grupos WHERE id = ?1 AND evento_id = ?2', [String(b.grupo_id), id], 'Grupo do evento')).id
+      : null;
     const formacao = formacaoDe(b.formacao, b.integrantes);
     await env.DB.prepare(sqlUpsertCoreografia).bind(aleatorio(12), id, numero, nome, grupoId, texto(b.categoria, 100, false) || null, formacao).run();
     await auditar(env, request, { eventoId: id, ator: a.ator, acao: 'coreografia_salva', detalhes: { numero, nome, formacao } });
@@ -613,7 +725,7 @@ export async function adicionarCoreografias(request, env, { id }) {
   const cache = new Map();
   const stmts = [];
   for (const [i, l] of linhas.entries()) {
-    const grupoId = await grupoPorNome(env, l.grupo || l.escola || l.companhia, cache);
+    const grupoId = await grupoPorNome(env, id, l.grupo || l.escola || l.companhia, cache);
     stmts.push(
       env.DB.prepare(sqlUpsertCoreografia).bind(aleatorio(12), id, Number.parseInt(l.numero, 10), (l.nome || l.coreografia || '').trim(),
         grupoId, (l.categoria || '').slice(0, 100) || null, formacoes[i]),
@@ -657,7 +769,8 @@ export async function quadroNotas(request, env, { id }) {
     env.DB.prepare('SELECT coreografia_id, jurado_id, nota, atualizado_em FROM notas WHERE evento_id = ?1').bind(id),
     // última versão de cada jurado em cada coreografia
     env.DB.prepare(
-      `SELECT g.id, g.coreografia_id, g.jurado_id, g.status, g.aprovada, g.versao, g.duracao_ms
+      `SELECT g.id, g.coreografia_id, g.jurado_id, g.status, g.aprovada, g.versao, g.duracao_ms,
+              g.identificador, g.tamanho, g.iniciado_em, g.finalizado_em
          FROM gravacoes g
         WHERE g.evento_id = ?1
           AND g.versao = (SELECT MAX(v.versao) FROM gravacoes v WHERE v.coreografia_id = g.coreografia_id AND v.jurado_id = g.jurado_id)`,
@@ -670,6 +783,7 @@ export async function quadroNotas(request, env, { id }) {
   for (const g of gra.results) {
     (audios.get(g.coreografia_id) || audios.set(g.coreografia_id, {}).get(g.coreografia_id))[g.jurado_id] = {
       gravacao_id: g.id, status: g.aprovada ? 'aprovado' : g.status, versao: g.versao, duracao_ms: g.duracao_ms,
+      identificador: g.identificador, tamanho: g.tamanho, iniciado_em: g.iniciado_em, finalizado_em: g.finalizado_em,
     };
   }
   let lancadas = 0;

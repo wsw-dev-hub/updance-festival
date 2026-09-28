@@ -1,6 +1,7 @@
 // Tela exclusiva do evento — usada pela organização (nível geral) e pelos responsáveis do evento.
 // Abas: Notas (quadro coreografias × jurados, com status dos áudios e média), Ranking (pódio + lista,
-// por formação), Áudios, Coreografias, Jurados (escala), Responsáveis (só geral), Auditoria e Minha conta.
+// por formação), Áudios, Coreografias, Grupos/escolas, Jurados (cadastro e escala), Auditoria e Minha conta.
+// Os responsáveis do evento são cadastrados na tela "Eventos e responsáveis" (/admin/eventos/).
 
 import {
   $, num, api, aviso, tentar, el, icone, botao, selo, vazio, fmtDuracao, fmtHora, fmtData, paraCampo, comFuso, fmtNota,
@@ -10,7 +11,7 @@ import {
 import { montarZip } from './zip.js';
 
 const CHAVE_ABA = 'udx-festival.evento.aba';
-const ABAS = ['notas', 'ranking', 'gravacoes', 'coreografias', 'jurados', 'responsaveis', 'auditoria', 'conta'];
+const ABAS = ['notas', 'ranking', 'gravacoes', 'coreografias', 'grupos', 'jurados', 'auditoria', 'conta'];
 const estado = {
   eu: null,
   eventos: [],
@@ -32,11 +33,12 @@ const fmtMedia = (m) => fmtNota(m, Math.min(casas() + 1, 3));
 /* ================================ NAVEGAÇÃO ================================ */
 
 function trocarAba(nome) {
-  if (!ABAS.includes(nome) || (nome === 'responsaveis' && !geral())) nome = 'notas';
+  if (!ABAS.includes(nome)) nome = 'notas';
   estado.aba = nome;
   guardar(CHAVE_ABA, nome);
   for (const b of document.querySelectorAll('[data-aba]')) b.classList.toggle('is-active', b.dataset.aba === nome);
   for (const s of document.querySelectorAll('.aba')) s.hidden = s.id !== `aba-${nome}`;
+  if (nome === 'coreografias' && estado.detalhe) renderizarCoreografias();
   const carregar = { gravacoes: carregarGravacoes, auditoria: carregarAuditoria }[nome];
   if (carregar && estado.eventoId) tentar(carregar);
 }
@@ -65,6 +67,10 @@ async function abrirEvento(id) {
 async function carregarDetalhe() {
   estado.detalhe = await api('GET', `/api/admin/eventos/${estado.eventoId}`);
   const { evento, coreografias, jurados, responsaveis, link_jurados } = estado.detalhe;
+  $('ev-responsaveis').textContent = responsaveis.length
+    ? `Responsáveis: ${responsaveis.map((r) => r.nome).join(', ')}`
+    : 'Sem responsável definido.';
+  $('link-responsaveis').href = `/admin/eventos/#evento-${evento.id}`;
   document.title = `${evento.nome} · UpDance Festival`;
   $('ev-nome').textContent = evento.nome;
   $('ev-data').textContent = fmtData(evento.data);
@@ -76,7 +82,7 @@ async function carregarDetalhe() {
   $('c-jurados').textContent = jurados.filter((j) => j.ativo).length;
   renderizarCoreografias();
   renderizarEscala();
-  renderizarResponsaveis(responsaveis);
+
 }
 
 function preencherFormEvento() {
@@ -138,6 +144,7 @@ async function carregarQuadro() {
   montarFiltroFormacao();
   renderizarNotas();
   renderizarRanking();
+  if (estado.detalhe) renderizarCoreografias();
 }
 
 function montarFiltroFormacao() {
@@ -166,7 +173,7 @@ function flagAudio(a, jurado, c) {
   if (!a) return el('span', { class: 'flag f-nenhum', title: titulo, textContent: info.glifo });
   return el('button', {
     class: `flag f-${st}`, type: 'button', title: `${titulo} — tocar`, ariaLabel: `Ouvir: ${titulo}`, textContent: info.glifo,
-    onclick: () => tocar($('player-notas'), a.gravacao_id, `${num(c.numero)} · ${c.nome} — ${jurado.nome}`),
+    onclick: () => ouvir(a.gravacao_id, `${num(c.numero)} · ${c.nome} — ${jurado.nome}${st === 'gravando' ? ' (parcial)' : ''}`),
   });
 }
 
@@ -188,12 +195,41 @@ function corrigirDuracao(player) {
   });
 }
 
-function tocar(player, gravacaoId, rotulo, { avisar = true } = {}) {
+/**
+ * Player único da tela (barra fixa): usado pelos sinais da aba Notas, pela aba Áudios e pela lista
+ * de coreografias. Clicar de novo no mesmo áudio alterna tocar/pausar.
+ */
+function ouvir(gravacaoId, titulo) {
+  const player = $('player');
+  if (estado.tocando === gravacaoId && player.src) {
+    if (player.paused) player.play().catch(() => {});
+    else player.pause();
+    return;
+  }
   corrigirDuracao(player);
+  estado.tocando = gravacaoId;
+  $('player-titulo').textContent = titulo;
+  $('barra-player').hidden = false;
   player.src = `/api/admin/gravacoes/${gravacaoId}/audio`;
-  player.hidden = false;
   player.play().catch(() => aviso('Não foi possível tocar este áudio neste navegador. Use "Baixar" e abra no seu player.', true));
-  if (avisar) aviso(`Tocando: ${rotulo}`);
+}
+
+const estaTocando = (gravacaoId) => estado.tocando === gravacaoId && !$('player').paused;
+
+function fecharPlayer() {
+  const player = $('player');
+  player.pause();
+  player.removeAttribute('src');
+  player.load();
+  estado.tocando = null;
+  $('barra-player').hidden = true;
+  rerenderizarListasDeAudio();
+}
+
+/** Mantém os botões Ouvir/Pausar das listas iguais ao estado do player. */
+function rerenderizarListasDeAudio() {
+  if (estado.aba === 'gravacoes') renderizarGravacoes();
+  if (estado.aba === 'coreografias' && estado.detalhe) renderizarCoreografias();
 }
 
 function filtrarNotas(lista) {
@@ -393,7 +429,6 @@ function gravacoesFiltradas() {
 
 function renderizarGravacoes() {
   const lista = gravacoesFiltradas();
-  const player = $('player');
   const completos = lista.filter((g) => g.status === 'completo');
   const bytes = completos.reduce((s, g) => s + (g.tamanho || 0), 0);
   if (!estado.baixando) {
@@ -408,7 +443,7 @@ function renderizarGravacoes() {
             ? selo('gravando', `Chegando · ${g.trechos} trechos`)
             : selo(st === 'aprovado' ? 'aprovada' : 'completo', st === 'aprovado' ? 'Aprovado' : 'Completo');
           const urlAudio = `/api/admin/gravacoes/${g.id}/audio`;
-          const tocandoEste = estado.tocando === g.id && !player.paused;
+          const tocandoEste = estaTocando(g.id);
           return el('tr', { class: estado.tocando === g.id ? 'tocando' : '', dataset: { id: g.id } },
             el('td', {}, el('span', { class: 'num', textContent: num(g.numero) })),
             el('td', {},
@@ -435,16 +470,7 @@ function renderizarGravacoes() {
 }
 
 function alternarAudio(g) {
-  const player = $('player');
-  if (estado.tocando === g.id) {
-    if (player.paused) player.play().catch(() => {});
-    else player.pause();
-    return;
-  }
-  estado.tocando = g.id;
-  $('player-titulo').textContent = `${num(g.numero)} · ${g.coreografia} — ${g.jurado}${g.status !== 'completo' ? ' (parcial)' : ''}`;
-  $('barra-player').hidden = false;
-  tocar(player, g.id, g.identificador, { avisar: false }); // o título já aparece na barra do player
+  ouvir(g.id, `${num(g.numero)} · ${g.coreografia} — ${g.jurado}${g.status !== 'completo' ? ' (parcial)' : ''}`);
 }
 
 async function aprovar(g, aprovada) {
@@ -455,12 +481,20 @@ async function aprovar(g, aprovada) {
 const fmtBytes = (b) => (b >= 1048576 ? `${(b / 1048576).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 const pastaDe = (g) => `${num(g.numero)}_${g.coreografia}`.normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 60);
 
-/** Baixa os áudios completos da lista filtrada, um por um, e monta um ZIP (pastas por coreografia). */
-async function baixarZip() {
+/** Aba Áudios: ZIP dos áudios completos da lista filtrada. */
+function baixarZip() {
+  const filtro = [$('filtro-jurado-audios').value, $('filtro-status-audios').value].filter((v) => v !== '*').join('_');
+  return montarEBaixarZip(gravacoesFiltradas().filter((g) => g.status === 'completo'), filtro, (t) => ($('btn-zip-texto').textContent = t));
+}
+
+/**
+ * Baixa os áudios, um por um, e monta um ZIP no navegador (pastas por coreografia).
+ * @param {{id, identificador, numero, coreografia, tamanho, finalizado_em, iniciado_em}[]} lista
+ */
+async function montarEBaixarZip(lista, sufixo, progresso) {
   if (estado.baixando) return;
-  const lista = gravacoesFiltradas().filter((g) => g.status === 'completo');
   const total = lista.reduce((s, g) => s + (g.tamanho || 0), 0);
-  if (!lista.length) return aviso('Nenhum áudio completo na lista filtrada.', true);
+  if (!lista.length) return aviso('Nenhum áudio completo para baixar.', true);
   if (total > ZIP_LIMITE_BYTES) {
     return aviso(`São ${fmtBytes(total)} de áudio: acima de ${fmtBytes(ZIP_LIMITE_BYTES)}, o navegador pode travar. Filtre por jurado ou coreografia e baixe em partes.`, true);
   }
@@ -469,16 +503,15 @@ async function baixarZip() {
   try {
     const arquivos = [];
     for (const [i, g] of lista.entries()) {
-      $('btn-zip-texto').textContent = `Baixando ${i + 1}/${lista.length}…`;
+      progresso(`Baixando ${i + 1}/${lista.length}…`);
       const r = await fetch(`/api/admin/gravacoes/${g.id}/audio?download=1`, { credentials: 'same-origin', cache: 'no-store' });
       if (!r.ok) throw new Error(`Falha ao baixar ${g.identificador} (erro ${r.status})`);
       arquivos.push({ nome: `${pastaDe(g)}/${g.identificador}`, bytes: new Uint8Array(await r.arrayBuffer()), data: new Date(g.finalizado_em || g.iniciado_em) });
     }
-    $('btn-zip-texto').textContent = 'Montando o ZIP…';
+    progresso('Montando o ZIP…');
     const zip = montarZip(arquivos);
     const ev = estado.detalhe.evento;
-    const filtro = [$('filtro-jurado-audios').value, $('filtro-status-audios').value].filter((v) => v !== '*').join('_');
-    const nome = `audios_${ev.data}_${ev.nome}${filtro ? `_${filtro}` : ''}.zip`.normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^A-Za-z0-9._-]+/g, '-').toLowerCase();
+    const nome = `audios_${ev.data}_${ev.nome}${sufixo ? `_${sufixo}` : ''}.zip`.normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^A-Za-z0-9._-]+/g, '-').toLowerCase();
     const url = URL.createObjectURL(zip);
     const a = el('a', { href: url, download: nome });
     document.body.append(a);
@@ -489,17 +522,141 @@ async function baixarZip() {
   } finally {
     estado.baixando = false;
     renderizarGravacoes();
+    if (estado.detalhe) renderizarCoreografias();
   }
 }
 
 /* ================================ COREOGRAFIAS ================================ */
 
 async function carregarGrupos() {
-  estado.grupos = await api('GET', '/api/admin/grupos');
-  $('sel-grupo-coreografia').replaceChildren(
+  estado.grupos = await api('GET', `/api/admin/eventos/${estado.eventoId}/grupos`);
+  $('c-grupos').textContent = estado.grupos.length;
+  const sel = $('sel-grupo-coreografia');
+  const atual = sel.value;
+  sel.replaceChildren(
     el('option', { value: '', textContent: 'Sem grupo' }),
     ...estado.grupos.map((g) => el('option', { value: g.id, textContent: g.cidade ? `${g.nome} (${g.cidade})` : g.nome })),
   );
+  sel.value = estado.grupos.some((g) => g.id === atual) ? atual : '';
+  renderizarGrupos();
+}
+
+/* ================================ GRUPOS / ESCOLAS ================================ */
+
+const CAMPOS_GRUPO = ['nome', 'cidade', 'responsavel', 'email', 'telefone', 'integrantes', 'coreografo', 'diretores', 'coordenadores'];
+const nomesDe = (texto) => (texto ? texto.split('\n').filter(Boolean) : []);
+
+function linhaEquipe(rotulo, texto) {
+  const nomes = nomesDe(texto);
+  return nomes.length ? el('div', {}, el('span', { class: 'rotulo-equipe', textContent: `${rotulo}: ` }), nomes.join(', ')) : null;
+}
+
+function listaIntegrantes(texto) {
+  const nomes = nomesDe(texto);
+  if (!nomes.length) return el('span', { class: 'muted', textContent: '—' });
+  return el('details', { class: 'integrantes' },
+    el('summary', { textContent: `${nomes.length} integrante${nomes.length > 1 ? 's' : ''}` }),
+    el('ol', {}, ...nomes.map((n) => el('li', { textContent: n }))),
+  );
+}
+
+function renderizarGrupos() {
+  $('tb-grupos').replaceChildren(
+    ...(estado.grupos.length
+      ? estado.grupos.map((g) =>
+          el('tr', {},
+            el('td', {},
+              el('strong', { textContent: g.nome }),
+              el('div', { class: 'muted', textContent: [g.cidade, g.responsavel && `Resp.: ${g.responsavel}`].filter(Boolean).join(' · ') }),
+            ),
+            el('td', { class: 'equipe' },
+              linhaEquipe('Coreógrafo(a)/prof.', g.coreografo),
+              linhaEquipe('Direção', g.diretores),
+              linhaEquipe('Coordenação', g.coordenadores),
+              !g.coreografo && !g.diretores && !g.coordenadores ? el('span', { class: 'muted', textContent: '—' }) : null,
+            ),
+            el('td', {}, listaIntegrantes(g.integrantes)),
+            el('td', {}, el('div', { class: 'ident', textContent: g.email || '' }), el('div', { textContent: g.telefone || '' })),
+            el('td', { textContent: g.coreografias }),
+            el('td', { class: 'acoes' },
+              botao('Editar', 'pencil', () => editarGrupo(g)),
+              g.coreografias ? null : botao('Excluir', 'delete-outline', () => excluirGrupo(g), 'btn btn-sec btn-perigo'),
+            ),
+          ),
+        )
+      : [vazio(6, 'Nenhum grupo ou escola cadastrado neste evento.')]),
+  );
+}
+
+function editarGrupo(g) {
+  const f = $('form-grupo');
+  for (const k of ['id', ...CAMPOS_GRUPO]) f[k].value = g[k] || '';
+  $('btn-salvar-grupo').replaceChildren(icone('content-save-outline'), ' Salvar alterações');
+  $('btn-cancelar-grupo').hidden = false;
+  f.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  f.nome.focus();
+}
+
+function cancelarGrupo() {
+  $('form-grupo').reset();
+  $('form-grupo').id.value = '';
+  $('btn-salvar-grupo').replaceChildren(icone('plus'), ' Cadastrar');
+  $('btn-cancelar-grupo').hidden = true;
+}
+
+async function salvarGrupo(e) {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const id = f.get('id');
+  const dados = Object.fromEntries(CAMPOS_GRUPO.map((k) => [k, f.get(k)]));
+  if (id) await api('PATCH', `/api/admin/grupos/${id}`, { json: dados });
+  else await api('POST', `/api/admin/eventos/${estado.eventoId}/grupos`, { json: dados });
+  aviso(`Grupo "${dados.nome}" ${id ? 'atualizado' : 'cadastrado'}.`);
+  cancelarGrupo();
+  await Promise.all([carregarGrupos(), carregarDetalhe()]);
+}
+
+async function excluirGrupo(g) {
+  if (!confirm(`Excluir o grupo "${g.nome}"?`)) return;
+  await api('DELETE', `/api/admin/grupos/${g.id}`);
+  aviso('Grupo excluído.');
+  await carregarGrupos();
+}
+
+/* ================================ COREOGRAFIAS (lista) ================================ */
+
+/** Célula "Áudios dos jurados": último áudio de cada jurado, com Ouvir/Pausar e Baixar. */
+function audiosDaCoreografia(c) {
+  const q = estado.quadro?.coreografias.find((x) => x.id === c.id);
+  const jurados = estado.quadro?.jurados || [];
+  const itens = jurados.map((j) => ({ j, a: q?.audios[j.id] })).filter((x) => x.a);
+  const notas = el('div', { class: 'muted', textContent: `${c.n_notas} nota(s) · ${c.n_gravacoes} gravação(ões)` });
+  if (!itens.length) return [el('span', { class: 'muted', textContent: 'Nenhum áudio ainda' }), notas];
+  const completos = itens.filter((x) => x.a.status !== 'gravando');
+  return [
+    el('ul', { class: 'audios-coreografia' },
+      ...itens.map(({ j, a }) => {
+        const info = STATUS_AUDIO[a.status];
+        const titulo = `${num(c.numero)} · ${c.nome} — ${j.nome}${a.status === 'gravando' ? ' (parcial)' : ''}`;
+        const tocando = estaTocando(a.gravacao_id);
+        return el('li', { class: estado.tocando === a.gravacao_id ? 'tocando' : '' },
+          el('span', { class: `flag f-${a.status}`, title: info.texto, textContent: info.glifo }),
+          el('span', { class: 'audio-jurado', title: j.nome }, el('strong', { textContent: `J${j.ordem}` }), ` ${j.nome}`,
+            a.duracao_ms ? el('span', { class: 'muted', textContent: ` · ${fmtDuracao(a.duracao_ms)}` }) : null),
+          botao(tocando ? 'Pausar' : 'Ouvir', tocando ? 'pause' : 'play', () => ouvir(a.gravacao_id, titulo), `btn btn-mini ${tocando ? 'btn-hot' : 'btn-sec'}`),
+          el('a', { class: 'btn btn-sec btn-mini', href: `/api/admin/gravacoes/${a.gravacao_id}/audio?download=1`, download: '',
+            title: a.status === 'gravando' ? 'Baixa o que já chegou (parcial)' : `Baixar ${a.identificador}` },
+            icone('download'), a.status === 'gravando' ? ' Parcial' : ' Baixar'),
+        );
+      }),
+    ),
+    completos.length > 1
+      ? botao(`ZIP da coreografia (${completos.length})`, 'folder-zip-outline', () => montarEBaixarZip(
+          completos.map(({ a }) => ({ id: a.gravacao_id, identificador: a.identificador, numero: c.numero, coreografia: c.nome, tamanho: a.tamanho, finalizado_em: a.finalizado_em, iniciado_em: a.iniciado_em })),
+          `${num(c.numero)}`, (t) => aviso(t)), 'btn btn-sec btn-mini')
+      : null,
+    notas,
+  ];
 }
 
 function renderizarCoreografias() {
@@ -514,7 +671,7 @@ function renderizarCoreografias() {
             el('td', { textContent: c.grupo || '—' }),
             el('td', { textContent: c.categoria || '—' }),
             el('td', {}, c.formacao ? rotuloFormacao(c.formacao) : selo('bloqueado', 'definir')),
-            el('td', { class: 'muted', textContent: `${c.n_gravacoes} áudio(s) · ${c.n_notas} nota(s)` }),
+            el('td', { class: 'celula-audios' }, ...audiosDaCoreografia(c)),
             el('td', { class: 'acoes' },
               botao('Editar', 'pencil', () => editarCoreografia(c)),
               botao('Link de entrega', 'link-plus', () => gerarLink(c)),
@@ -590,7 +747,7 @@ function renderizarEscala() {
           el('tr', {},
             el('td', {}, el('span', { class: 'num', textContent: j.ordem })),
             el('td', { textContent: j.nome }),
-            el('td', { class: 'ident', textContent: j.email }),
+            el('td', {}, el('div', { class: 'ident', textContent: j.email }), j.telefone ? el('div', { textContent: j.telefone }) : null),
             el('td', {},
               j.ativo ? selo('completo', 'Escalado') : selo('inativo', 'Suspenso'),
               !j.conta_ativa ? el('div', {}, selo('inativo', 'Conta desativada')) : j.trocar_senha ? el('div', {}, selo('provisoria', 'Senha provisória')) : null,
@@ -600,6 +757,7 @@ function renderizarEscala() {
               j.ativo
                 ? botao('Suspender', 'account-off', () => alterarEscala(j, false), 'btn btn-sec btn-perigo')
                 : botao('Reativar', 'account-check', () => alterarEscala(j, true)),
+              botao('Editar', 'pencil', () => editarJurado(j)),
               botao('Nova senha', 'lock-reset', () => novaSenhaJurado(j)),
             ),
           ),
@@ -629,45 +787,20 @@ async function alterarEscala(j, ativo) {
   await Promise.all([carregarDetalhe(), carregarQuadro()]);
 }
 
+async function editarJurado(j) {
+  const nome = prompt('Nome do jurado:', j.nome);
+  if (nome == null) return;
+  const telefone = prompt('Telefone (deixe vazio para remover):', j.telefone || '');
+  if (telefone == null) return;
+  await api('PATCH', `/api/admin/jurados/${j.id}`, { json: { nome, telefone } });
+  aviso('Jurado atualizado.');
+  await Promise.all([carregarDetalhe(), carregarQuadro()]);
+}
+
 async function novaSenhaJurado(j) {
   if (!confirm(`Gerar nova senha provisória para ${j.nome}? A senha atual deixa de valer.`)) return;
   const r = await api('POST', `/api/admin/jurados/${j.id}/redefinir-senha`);
   mostrarSenha(`Nova senha provisória de ${j.nome} (${r.email})`, r.senha_provisoria);
-  await carregarDetalhe();
-}
-
-/* ================================ RESPONSÁVEIS ================================ */
-
-function renderizarResponsaveis(lista) {
-  $('tb-responsaveis').replaceChildren(
-    ...(lista.length
-      ? lista.map((a) =>
-          el('tr', {},
-            el('td', { textContent: a.nome }),
-            el('td', { class: 'ident', textContent: a.email }),
-            el('td', {}, situacaoConta(a)),
-            el('td', { textContent: fmtHora(a.ultimo_acesso) }),
-            el('td', { class: 'acoes' }, geral() ? botao('Remover do evento', 'account-remove', () => removerResponsavel(a), 'btn btn-sec btn-perigo') : null),
-          ),
-        )
-      : [vazio(5, 'Nenhum responsável ligado a este evento.')]),
-  );
-}
-
-async function adicionarResponsavel(e) {
-  e.preventDefault();
-  const f = new FormData(e.target);
-  const r = await api('POST', `/api/admin/eventos/${estado.eventoId}/responsaveis`, { json: { nome: f.get('nome'), email: f.get('email') } });
-  e.target.reset();
-  if (r.senha_provisoria) mostrarSenha(`Conta de responsável criada: ${r.nome} (${r.email}) · acesso: ${r.link}`, r.senha_provisoria);
-  aviso(`${r.nome} agora é responsável por este evento.`);
-  await carregarDetalhe();
-}
-
-async function removerResponsavel(a) {
-  if (!confirm(`Remover ${a.nome} deste evento? A pessoa perde o acesso a esta tela na hora.`)) return;
-  await api('DELETE', `/api/admin/eventos/${estado.eventoId}/responsaveis/${a.id}`);
-  aviso(`${a.nome} removido do evento.`);
   await carregarDetalhe();
 }
 
@@ -716,11 +849,13 @@ async function iniciar() {
   $('filtro-status-audios').addEventListener('change', renderizarGravacoes);
   $('btn-zip').addEventListener('click', () => tentar(baixarZip));
   // o botão da linha acompanha o player (tocar/pausar/terminar)
-  for (const ev of ['play', 'pause', 'ended']) $('player').addEventListener(ev, () => { if (estado.aba === 'gravacoes') renderizarGravacoes(); });
+  for (const ev of ['play', 'pause', 'ended']) $('player').addEventListener(ev, rerenderizarListasDeAudio);
+  $('btn-fechar-player').addEventListener('click', fecharPlayer);
   $('form-coreografia').addEventListener('submit', (e) => tentar(() => salvarCoreografia(e)));
   $('btn-importar').addEventListener('click', () => tentar(importarCsv));
   $('form-escala').addEventListener('submit', (e) => tentar(() => escalar(e)));
-  $('form-responsavel').addEventListener('submit', (e) => tentar(() => adicionarResponsavel(e)));
+  $('form-grupo').addEventListener('submit', (e) => tentar(() => salvarGrupo(e)));
+  $('btn-cancelar-grupo').addEventListener('click', cancelarGrupo);
   $('form-conta-senha').addEventListener('submit', (e) => tentar(() => trocarMinhaSenha(e)));
   $('btnSair').addEventListener('click', () => tentar(sair));
   ligarCaixaSenha();
@@ -730,8 +865,6 @@ async function iniciar() {
     $('adminEmail').textContent = estado.eu.email;
     $('adminChip').hidden = false;
     $('link-dashboard').hidden = !geral();
-    $('tab-responsaveis').hidden = !geral();
-    $('form-responsavel').hidden = !geral();
     $('conta-nome').textContent = estado.eu.nome;
     $('conta-email').textContent = estado.eu.email;
     $('conta-nivel').textContent = geral() ? 'Administrador geral' : 'Responsável de evento';
@@ -745,7 +878,7 @@ async function iniciar() {
     }
     const pedido = new URLSearchParams(location.search).get('id');
     const id = estado.eventos.some((e) => e.id === pedido) ? pedido : estado.eventos[0].id;
-    trocarAba(ler(CHAVE_ABA) || 'notas');
+    trocarAba(location.hash.slice(1) || ler(CHAVE_ABA) || 'notas');
     await abrirEvento(id);
   });
 }

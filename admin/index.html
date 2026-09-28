@@ -17,8 +17,9 @@
 <body class="page-admin">
 <header class="admin-topbar">
   <span class="udx-marca"><img class="udx-marca-icone" src="/images/icons/udx-icon.png" alt="Up Dance Xperience">
-    <span class="udx-marca-texto"><span class="l1">UpDance</span><span class="l2">Festival · Admin</span></span></span>
+    <span class="udx-marca-texto"><span class="l1">UpDance</span><span class="l2">Festival · Controle</span></span></span>
   <div class="topbar-acoes">
+    <a class="btn btn-sec" href="/admin/eventos/"><i class="mdi mdi-calendar-multiple"></i><span class="rotulo"> Eventos e responsáveis</span></a>
     <span id="adminChip" class="type-chip" hidden><i class="mdi mdi-shield-account"></i><span id="adminEmail"></span></span>
     <button id="btnTema" class="btn btn-icone" type="button" aria-label="Alternar tema" title="Tema claro/escuro"><i class="mdi mdi-theme-light-dark"></i><span class="rotulo-alt">Tema</span></button>
     <button id="btnSair" class="btn btn-icone" type="button" aria-label="Sair" title="Sair"><i class="mdi mdi-logout"></i><span class="rotulo-alt">Sair</span></button>
@@ -26,13 +27,22 @@
 </header>
 
 <main class="admin-main">
+  <section class="card cabeca-painel">
+    <div class="card-head">
+      <h1>Painel de <em>controle</em></h1>
+      <button id="btn-atualizar" class="btn btn-sec" type="button"><i class="mdi mdi-refresh"></i> Atualizar</button>
+    </div>
+    <p class="muted">Visão geral e gerenciamento do sistema. Eventos, responsáveis, grupos, jurados e coreografias são cadastrados em
+      <a class="link-udx" href="/admin/eventos/">Eventos e responsáveis</a> e na tela de cada evento.</p>
+  </section>
+
   <nav class="tabs tabs-principal" role="tablist" aria-label="Seções">
-    <button class="tab is-active" data-secao="eventos" role="tab"><i class="mdi mdi-calendar-star"></i> Eventos <span id="c-eventos" class="contador"></span></button>
+    <button class="tab is-active" data-secao="geral" role="tab"><i class="mdi mdi-view-dashboard-outline"></i> Visão geral</button>
+    <button class="tab" data-secao="admins" role="tab"><i class="mdi mdi-shield-account"></i> Administradores <span id="c-admins" class="contador"></span></button>
     <button class="tab" data-secao="jurados" role="tab"><i class="mdi mdi-account-star"></i> Jurados <span id="c-jurados-total" class="contador"></span></button>
     <button class="tab" data-secao="grupos" role="tab"><i class="mdi mdi-account-group"></i> Grupos <span id="c-grupos" class="contador"></span></button>
-    <button class="tab" data-secao="admins" role="tab"><i class="mdi mdi-shield-account"></i> Administradores</button>
-    <button class="tab" data-secao="conta" role="tab"><i class="mdi mdi-account-cog"></i> Minha conta</button>
     <button class="tab" data-secao="auditoria" role="tab"><i class="mdi mdi-shield-search"></i> Auditoria</button>
+    <button class="tab" data-secao="conta" role="tab"><i class="mdi mdi-account-cog"></i> Minha conta</button>
   </nav>
 
   <p id="mensagem" class="mensagem" role="status" aria-live="polite"></p>
@@ -50,44 +60,41 @@
     </div>
   </div>
 
-  <!-- ============================ EVENTOS ============================ -->
-  <section id="secao-eventos" class="secao">
+  <!-- ============================ VISÃO GERAL ============================ -->
+  <section id="secao-geral" class="secao">
+    <section class="indicadores indicadores-geral" id="indicadores" aria-label="Números do sistema"></section>
+    <div id="alertas-controle" class="alertas-controle" hidden></div>
     <section class="card">
       <div class="card-head">
-        <h1>Eventos do <em>festival</em></h1>
-        <button id="btn-atualizar" class="btn btn-sec" type="button"><i class="mdi mdi-refresh"></i> Atualizar</button>
+        <h2>Eventos</h2>
+        <a class="btn btn-hot" href="/admin/eventos/#novo"><i class="mdi mdi-calendar-plus"></i> Novo evento</a>
       </div>
-      <p class="muted">Cada evento tem a sua tela exclusiva: notas, ranking, áudios, coreografias e escala. Os responsáveis de cada evento entram direto nela.</p>
-      <details id="det-evento">
-        <summary><i class="mdi mdi-plus-circle-outline"></i> Novo evento</summary>
-        <form id="form-evento" class="grade">
-          <label>Nome <input name="nome" required maxlength="120" placeholder="Festival UpDance 2026"></label>
-          <label>Data <input name="data" type="date" required></label>
-          <label>Local <input name="local" maxlength="160" placeholder="Teatro, cidade"></label>
-          <label>Jurados podem avaliar a partir de <input name="abre_em" type="datetime-local"></label>
-          <label>Encerramento <input name="fecha_em" type="datetime-local"></label>
-          <label>Duração máxima por comentário (min) <input name="duracao_max_min" type="number" min="1" max="30" value="8"></label>
-          <label>Nota mínima <input name="nota_min" type="number" min="0" max="1000" step="any" value="0"></label>
-          <label>Nota máxima <input name="nota_max" type="number" min="1" max="1000" step="any" value="10"></label>
-          <label>Casas decimais da nota
-            <select name="nota_casas"><option value="0">0 (ex.: 8)</option><option value="1" selected>1 (ex.: 8,5)</option><option value="2">2 (ex.: 8,75)</option></select></label>
-          <label class="check"><input name="anonimizar_jurados" type="checkbox"> Participantes veem "Jurado 1, 2…" em vez do nome</label>
-          <div class="linha"><button type="submit" class="btn btn-hot"><i class="mdi mdi-calendar-plus"></i> Criar evento</button></div>
-        </form>
-      </details>
+      <div class="tabela-rolagem"><table>
+        <thead><tr><th>Evento</th><th>Situação</th><th>Responsáveis</th><th>Coreo.</th><th>Grupos</th><th>Jurados</th><th>Notas</th><th>Áudios</th><th>Ações</th></tr></thead>
+        <tbody id="tb-eventos"></tbody>
+      </table></div>
     </section>
-    <div id="grade-eventos" class="grade-eventos" aria-live="polite"></div>
+  </section>
+
+  <!-- ============================ ADMINISTRADORES ============================ -->
+  <section id="secao-admins" class="secao card" hidden>
+    <div class="card-head"><h2>Administradores e responsáveis</h2></div>
+    <p class="muted"><strong>Geral</strong>: acessa este painel e todos os eventos. <strong>Responsável de evento</strong>: cria e administra só os próprios eventos (cadastrado em <a class="link-udx" href="/admin/eventos/">Eventos e responsáveis</a>).</p>
+    <form id="form-admin" class="grade grade-compacta">
+      <label>Nome <input name="nome" required maxlength="120"></label>
+      <label>E-mail <input name="email" type="email" required maxlength="254"></label>
+      <button type="submit" class="btn btn-hot"><i class="mdi mdi-shield-plus"></i> Adicionar administrador geral</button>
+    </form>
+    <div class="tabela-rolagem"><table>
+      <thead><tr><th>Nome</th><th>E-mail</th><th>Nível / eventos</th><th>Último acesso</th><th>Situação</th><th>Ações</th></tr></thead>
+      <tbody id="tb-admins"></tbody>
+    </table></div>
   </section>
 
   <!-- ============================ JURADOS ============================ -->
   <section id="secao-jurados" class="secao card" hidden>
-    <div class="card-head"><h2>Jurados</h2><span class="muted">Contas de acesso ao app. Cada jurado pode atuar em vários eventos.</span></div>
-    <form id="form-jurado" class="grade grade-compacta">
-      <label>Nome <input name="nome" required maxlength="120"></label>
-      <label>E-mail <input name="email" type="email" required maxlength="254"></label>
-      <label>Telefone <input name="telefone" maxlength="40" placeholder="opcional"></label>
-      <button type="submit" class="btn btn-hot"><i class="mdi mdi-account-plus"></i> Cadastrar</button>
-    </form>
+    <div class="card-head"><h2>Contas de jurados</h2><span class="muted">O cadastro e a escala são feitos na tela de cada evento.</span></div>
+    <div class="linha filtros"><input id="busca-jurados" type="search" placeholder="Buscar nome ou e-mail" aria-label="Buscar jurados"></div>
     <div class="tabela-rolagem"><table>
       <thead><tr><th>Nome</th><th>E-mail</th><th>Telefone</th><th>Eventos</th><th>Situação</th><th>Ações</th></tr></thead>
       <tbody id="tb-jurados"></tbody>
@@ -96,47 +103,20 @@
 
   <!-- ============================ GRUPOS ============================ -->
   <section id="secao-grupos" class="secao card" hidden>
-    <div class="card-head"><h2>Grupos</h2><span class="muted">Escolas, companhias e grupos participantes.</span></div>
-    <form id="form-grupo" class="grade grade-compacta">
-      <input type="hidden" name="id">
-      <label>Nome <input name="nome" required maxlength="160"></label>
-      <label>Cidade <input name="cidade" maxlength="120"></label>
-      <label>Responsável <input name="responsavel" maxlength="120"></label>
-      <label>E-mail <input name="email" type="email" maxlength="254"></label>
-      <label>Telefone <input name="telefone" maxlength="40"></label>
-      <label class="campo-largo">Integrantes <span class="dica">um nome por linha</span>
-        <textarea name="integrantes" rows="4" maxlength="24000" placeholder="Ana Lima&#10;Bruno Souza&#10;Carla Mendes"></textarea></label>
-      <label class="campo-meio">Coreógrafo(a) / professor(a) <span class="dica">um por linha</span>
-        <textarea name="coreografo" rows="2" maxlength="1300"></textarea></label>
-      <label class="campo-meio">Diretores <span class="dica">um por linha</span>
-        <textarea name="diretores" rows="2" maxlength="2500"></textarea></label>
-      <label class="campo-meio">Coordenadores <span class="dica">um por linha</span>
-        <textarea name="coordenadores" rows="2" maxlength="2500"></textarea></label>
-      <div class="linha">
-        <button type="submit" class="btn btn-hot" id="btn-salvar-grupo"><i class="mdi mdi-plus"></i> Cadastrar</button>
-        <button type="button" class="btn btn-sec" id="btn-cancelar-grupo" hidden>Cancelar edição</button>
-      </div>
-    </form>
+    <div class="card-head"><h2>Grupos e escolas de todos os eventos</h2><span class="muted">O cadastro é feito na tela de cada evento (aba Grupos).</span></div>
+    <div class="linha filtros"><input id="busca-grupos" type="search" placeholder="Buscar grupo, cidade ou evento" aria-label="Buscar grupos"></div>
     <div class="tabela-rolagem"><table>
-      <thead><tr><th>Grupo</th><th>Equipe</th><th>Integrantes</th><th>Contato</th><th>Coreografias</th><th>Ações</th></tr></thead>
+      <thead><tr><th>Grupo</th><th>Evento</th><th>Equipe</th><th>Integrantes</th><th>Coreografias</th><th>Ações</th></tr></thead>
       <tbody id="tb-grupos"></tbody>
     </table></div>
   </section>
 
-  <!-- ============================ ADMINS ============================ -->
-  <section id="secao-admins" class="secao card" hidden>
-    <div class="card-head"><h2>Administradores</h2><span class="muted">Quem tem acesso a esta área.</span></div>
-    <p class="muted"><strong>Geral</strong>: acessa todo o festival. <strong>Responsável de evento</strong>: acessa só a tela dos eventos ligados a ele (ligue na aba <em>Responsáveis</em> da tela do evento).</p>
-    <form id="form-admin" class="grade grade-compacta">
-      <label>Nome <input name="nome" required maxlength="120"></label>
-      <label>E-mail <input name="email" type="email" required maxlength="254"></label>
-      <label>Nível
-        <select name="nivel"><option value="geral">Geral (organização)</option><option value="responsavel">Responsável de evento</option></select></label>
-      <button type="submit" class="btn btn-hot"><i class="mdi mdi-shield-plus"></i> Adicionar</button>
-    </form>
+  <!-- ============================ AUDITORIA ============================ -->
+  <section id="secao-auditoria" class="secao card" hidden>
+    <div class="card-head"><h2>Auditoria</h2><span class="muted">Acessos e alterações de contas (ações de eventos ficam em cada evento).</span></div>
     <div class="tabela-rolagem"><table>
-      <thead><tr><th>Nome</th><th>E-mail</th><th>Nível / eventos</th><th>Último acesso</th><th>Situação</th><th>Ações</th></tr></thead>
-      <tbody id="tb-admins"></tbody>
+      <thead><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Alvo</th><th>IP</th></tr></thead>
+      <tbody id="tb-auditoria"></tbody>
     </table></div>
   </section>
 
@@ -152,15 +132,6 @@
       <button type="submit" class="btn btn-hot"><i class="mdi mdi-lock-reset"></i> Trocar senha</button>
     </form>
     <p class="muted">Trocar a senha encerra suas sessões em outros aparelhos.</p>
-  </section>
-
-  <!-- ============================ AUDITORIA ============================ -->
-  <section id="secao-auditoria" class="secao card" hidden>
-    <div class="card-head"><h2>Auditoria</h2><span class="muted">Acessos e alterações de contas (ações de eventos ficam em cada evento).</span></div>
-    <div class="tabela-rolagem"><table>
-      <thead><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Alvo</th><th>IP</th></tr></thead>
-      <tbody id="tb-auditoria"></tbody>
-    </table></div>
   </section>
 </main>
 </body>
