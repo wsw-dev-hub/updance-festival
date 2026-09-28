@@ -334,21 +334,59 @@ function segmentosDisponiveis() {
   return segs;
 }
 
+const TODAS = '*';
+
+/** Escolhe a formação do ranking (abas e select ficam sincronizados; faixa e categoria voltam para "todas"). */
+function escolherFormacao(id) {
+  estado.segmento = id;
+  $('filtro-categoria').value = '*';
+  $('filtro-faixa').value = '*';
+  renderizarRanking();
+}
+
+/** Texto dos filtros ativos, para o título do pódio e o nome do CSV. */
+function descricaoFiltros(rotuloFormacao) {
+  const fx = $('filtro-faixa').value;
+  const cat = $('filtro-categoria').value;
+  return [rotuloFormacao, fx !== '*' ? rotuloFaixa(fx) || 'Sem faixa' : null, cat !== '*' ? cat : null].filter(Boolean);
+}
+
+function cartaoPodio(c, i, ativos) {
+  return el('article', { class: `podio-item podio-${i + 1}` },
+    el('div', { class: 'podio-posicao' }, el('span', { textContent: `${c.posicao}º` }), c.empate ? el('small', { textContent: 'empate' }) : null),
+    el('div', { class: 'podio-media', textContent: fmtMedia(c.media) }),
+    el('div', { class: 'podio-nome' }, el('span', { class: 'num', textContent: num(c.numero) }), ` ${c.nome}`),
+    el('div', { class: 'muted', textContent: [c.grupo, rotuloFaixa(c.faixa), c.categoria].filter(Boolean).join(' · ') || rotuloFormacao(c.formacao) }),
+    c.qtd_notas < ativos ? selo('gravando', `parcial · ${c.qtd_notas}/${ativos} notas`) : selo('completo', `${c.qtd_notas}/${ativos} notas`),
+  );
+}
+
 function renderizarRanking() {
   const segs = segmentosDisponiveis();
-  if (estado.segmento === null || !segs.some((s) => s.id === estado.segmento && s.total)) {
+  const todas = estado.quadro.coreografias;
+  if (estado.segmento === null || (estado.segmento !== TODAS && !segs.some((s) => s.id === estado.segmento && s.total))) {
     estado.segmento = (segs.find((s) => s.total) || segs[0]).id;
   }
+  const opcoes = [{ id: TODAS, rotulo: 'Todas', total: todas.length }, ...segs];
+
+  // Filtro de formação: abas (atalho) + select na linha de filtros
   $('segmentos').replaceChildren(
-    ...segs.map((s) =>
+    ...opcoes.map((s) =>
       el('button', {
         class: `tab${s.id === estado.segmento ? ' is-active' : ''}`, type: 'button', role: 'tab', disabled: !s.total,
-        onclick: () => { estado.segmento = s.id; $('filtro-categoria').value = '*'; $('filtro-faixa').value = '*'; renderizarRanking(); },
+        onclick: () => escolherFormacao(s.id),
       }, s.rotulo, el('span', { class: 'contador', textContent: ` ${s.total}` })),
     ),
   );
+  $('filtro-formacao-ranking').replaceChildren(
+    ...opcoes.map((s) => el('option', {
+      value: s.id, disabled: !s.total,
+      textContent: s.id === TODAS ? 'Todas as formações (um pódio por formação)' : `${s.rotulo} (${s.total})`,
+    })),
+  );
+  $('filtro-formacao-ranking').value = estado.segmento;
 
-  const daFormacao = estado.quadro.coreografias.filter((c) => (c.formacao || '') === estado.segmento);
+  const daFormacao = estado.segmento === TODAS ? todas : todas.filter((c) => (c.formacao || '') === estado.segmento);
   montarFiltroFaixa($('filtro-faixa'), daFormacao);
   const fx = $('filtro-faixa').value;
   const doSegmento = daFormacao.filter((c) => fx === '*' || (c.faixa || '') === fx);
@@ -358,27 +396,34 @@ function renderizarRanking() {
   sel.replaceChildren(el('option', { value: '*', textContent: 'Todas as categorias' }), ...cats.map((c) => el('option', { value: c, textContent: c })));
   sel.value = cats.includes(atual) ? atual : '*';
   sel.hidden = !cats.length;
+  const filtradas = doSegmento.filter((c) => sel.value === '*' || c.categoria === sel.value);
 
-  const lista = classificar(doSegmento.filter((c) => sel.value === '*' || c.categoria === sel.value));
+  // Classificação SEMPRE dentro de cada formação: em "Todas", um ranking (e um pódio) por formação
+  const blocos = segs
+    .filter((s) => estado.segmento === TODAS || s.id === estado.segmento)
+    .map((s) => ({ ...s, lista: classificar(filtradas.filter((c) => (c.formacao || '') === s.id)) }))
+    .filter((b) => estado.segmento !== TODAS || b.lista.length);
+  const lista = blocos.flatMap((b) => b.lista);
   estado.rankingAtual = lista;
   const ativos = estado.quadro.resumo.jurados_ativos;
   const comNota = lista.filter((c) => c.posicao);
   $('resumo-ranking').textContent = `${comNota.length} de ${lista.length} coreografias com nota`;
 
-  // Pódio: as 3 maiores médias
-  const top = comNota.slice(0, 3);
+  // Pódio(s): as 3 maiores médias de cada formação filtrada
   $('podio').replaceChildren(
-    ...(top.length
-      ? top.map((c, i) =>
-          el('article', { class: `podio-item podio-${i + 1}` },
-            el('div', { class: 'podio-posicao' }, el('span', { textContent: `${c.posicao}º` }), c.empate ? el('small', { textContent: 'empate' }) : null),
-            el('div', { class: 'podio-media', textContent: fmtMedia(c.media) }),
-            el('div', { class: 'podio-nome' }, el('span', { class: 'num', textContent: num(c.numero) }), ` ${c.nome}`),
-            el('div', { class: 'muted', textContent: [c.grupo, rotuloFaixa(c.faixa), c.categoria].filter(Boolean).join(' · ') || rotuloFormacao(c.formacao) }),
-            c.qtd_notas < ativos ? selo('gravando', `parcial · ${c.qtd_notas}/${ativos} notas`) : selo('completo', `${c.qtd_notas}/${ativos} notas`),
-          ),
-        )
-      : [el('p', { class: 'muted podio-vazio', textContent: 'O pódio aparece assim que as primeiras notas forem lançadas.' })]),
+    ...(blocos.length
+      ? blocos.map((b) => {
+          const top = b.lista.filter((c) => c.posicao).slice(0, 3);
+          return el('section', { class: 'podio-bloco', dataset: { formacao: b.id || 'sem' } },
+            el('h3', { class: 'podio-titulo' }, icone('podium-gold'), ' Pódio · ', descricaoFiltros(b.rotulo).join(' · ')),
+            el('div', { class: 'podio' },
+              ...(top.length
+                ? top.map((c, i) => cartaoPodio(c, i, ativos))
+                : [el('p', { class: 'muted podio-vazio', textContent: 'O pódio aparece assim que as primeiras notas forem lançadas.' })]),
+            ),
+          );
+        })
+      : [el('p', { class: 'muted podio-vazio', textContent: 'Nenhuma coreografia com estes filtros.' })]),
   );
 
   $('tb-ranking').replaceChildren(
@@ -389,29 +434,29 @@ function renderizarRanking() {
             el('td', {}, el('span', { class: 'num', textContent: num(c.numero) })),
             el('td', { textContent: c.nome }),
             el('td', { textContent: c.grupo || '—' }),
-            el('td', { textContent: c.categoria || '—' }),
+            el('td', { textContent: rotuloFormacao(c.formacao) }),
             el('td', { textContent: rotuloFaixa(c.faixa) || '—' }),
+            el('td', { textContent: c.categoria || '—' }),
             el('td', {}, el('strong', { class: 'media-valor', textContent: fmtMedia(c.media) })),
             el('td', {}, c.posicao
               ? (c.qtd_notas < ativos ? selo('gravando', `${c.qtd_notas}/${ativos} parcial`) : selo('completo', `${c.qtd_notas}/${ativos}`))
               : selo('provisoria', 'sem notas')),
           ),
         )
-      : [vazio(8, 'Nenhuma coreografia com estes filtros.')]),
+      : [vazio(9, 'Nenhuma coreografia com estes filtros.')]),
   );
 }
 
 function exportarRanking() {
   const lista = estado.rankingAtual || [];
-  const seg = segmentosDisponiveis().find((s) => s.id === estado.segmento)?.rotulo || 'ranking';
-  const cat = $('filtro-categoria').value;
-  const fx = $('filtro-faixa').value;
+  const seg = estado.segmento === TODAS ? 'todas-formacoes' : segmentosDisponiveis().find((s) => s.id === estado.segmento)?.rotulo || 'ranking';
   const ev = estado.quadro.evento;
   const jurados = estado.quadro.jurados.filter((j) => j.ativo);
-  baixarCsv(`ranking_${ev.data}_${seg}${fx !== '*' ? `_${rotuloFaixa(fx) || 'sem-faixa'}` : ''}${cat !== '*' ? `_${cat}` : ''}.csv`.toLowerCase().replace(/[^a-z0-9._-]+/g, '-'), [
-    ['posicao', 'numero', 'coreografia', 'grupo', 'categoria', 'formacao', 'faixa', 'media', 'notas_lancadas', ...jurados.map((j) => `J${j.ordem} ${j.nome}`)],
+  const nome = ['ranking', ev.data, seg, ...descricaoFiltros(null)].join('_');
+  baixarCsv(`${nome}.csv`.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-z0-9._-]+/g, '-'), [
+    ['formacao', 'posicao_na_formacao', 'numero', 'coreografia', 'grupo', 'faixa', 'categoria', 'media', 'notas_lancadas', ...jurados.map((j) => `J${j.ordem} ${j.nome}`)],
     ...lista.map((c) => [
-      c.posicao ?? '', c.numero, c.nome, c.grupo || '', c.categoria || '', rotuloFormacao(c.formacao), rotuloFaixa(c.faixa),
+      rotuloFormacao(c.formacao), c.posicao ?? '', c.numero, c.nome, c.grupo || '', rotuloFaixa(c.faixa), c.categoria || '',
       c.media == null ? '' : fmtMedia(c.media), c.qtd_notas, ...jurados.map((j) => (c.notas[j.id] == null ? '' : fmtNota(c.notas[j.id], casas()))),
     ]),
   ]);
@@ -866,6 +911,7 @@ async function iniciar() {
   $('filtro-formacao-notas').addEventListener('change', renderizarNotas);
   $('busca-notas').addEventListener('input', renderizarNotas);
   $('filtro-categoria').addEventListener('change', renderizarRanking);
+  $('filtro-formacao-ranking').addEventListener('change', (e) => escolherFormacao(e.target.value));
   $('filtro-faixa').addEventListener('change', () => { $('filtro-categoria').value = '*'; renderizarRanking(); });
   $('filtro-faixa-notas').addEventListener('change', renderizarNotas);
   $('btn-exportar-ranking').addEventListener('click', exportarRanking);

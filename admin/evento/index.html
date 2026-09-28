@@ -144,17 +144,18 @@
       <button id="btn-exportar-ranking" class="btn btn-sec" type="button"><i class="mdi mdi-file-delimited-outline"></i> Exportar CSV</button>
     </div>
     <nav class="tabs segmentos" id="segmentos" role="tablist" aria-label="Formação"></nav>
-    <div class="linha filtros">
-      <select id="filtro-faixa" aria-label="Faixa"></select>
-      <select id="filtro-categoria" aria-label="Categoria"></select>
+    <div class="linha filtros filtros-ranking">
+      <label class="filtro-rotulado">Formação <select id="filtro-formacao-ranking"></select></label>
+      <label class="filtro-rotulado">Faixa <select id="filtro-faixa"></select></label>
+      <label class="filtro-rotulado">Categoria <select id="filtro-categoria"></select></label>
       <span id="resumo-ranking" class="muted"></span>
     </div>
-    <div id="podio" class="podio" aria-label="Três maiores médias"></div>
+    <div id="podio" class="podios" aria-label="Três maiores médias de cada formação"></div>
     <div class="tabela-rolagem"><table>
-      <thead><tr><th>Posição</th><th>Nº</th><th>Coreografia</th><th>Grupo</th><th>Categoria</th><th>Faixa</th><th>Média</th><th>Notas</th></tr></thead>
+      <thead><tr><th>Posição</th><th>Nº</th><th>Coreografia</th><th>Grupo</th><th>Formação</th><th>Faixa</th><th>Categoria</th><th>Média</th><th>Notas</th></tr></thead>
       <tbody id="tb-ranking"></tbody>
     </table></div>
-    <p class="muted">Empates na média dividem a mesma posição. "Parcial" = ainda faltam notas de jurados ativos.</p>
+    <p class="muted">A posição é sempre calculada dentro da formação (e dos filtros de faixa e categoria escolhidos). Empates na média dividem a mesma posição. "Parcial" = ainda faltam notas de jurados ativos.</p>
   </section>
 
   <!-- ============================ ÁUDIOS ============================ -->

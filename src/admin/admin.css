@@ -333,3 +333,20 @@ fieldset.bloco-responsaveis p { margin: 0; }
   .grade-eventos-largo { grid-template-columns: 1fr; }
   .form-add-responsavel, .linha-responsavel { grid-template-columns: 1fr; }
 }
+
+/* =====================================================================
+   Ranking: filtro de formação no pódio (um pódio por formação em "Todas")
+   ===================================================================== */
+.filtros-ranking { align-items: end; }
+.filtro-rotulado { display: grid; gap: 4px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.filtro-rotulado select { text-transform: none; letter-spacing: 0; }
+.filtro-rotulado:has(select[hidden]) { display: none; }
+.filtros-ranking #resumo-ranking { align-self: center; }
+.podios { display: grid; gap: 18px; margin: 10px 0 16px; }
+.podio-bloco .podio { margin: 6px 0 0; }
+.podio-titulo { margin: 0; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.podio-titulo .mdi { color: var(--udx-primary-hot); }
+.podio-bloco + .podio-bloco { padding-top: 16px; border-top: 1px dashed var(--line); }
+@media (max-width: 640px) {
+  .filtro-rotulado { flex: 1 1 100%; }
+}

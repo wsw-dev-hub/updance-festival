@@ -33,7 +33,8 @@ Projeto único:
 - A escala é definida por evento: mínima, máxima e casas decimais. O padrão é **0 a 10, uma casa**.
 - O jurado pode alterar a nota enquanto o evento aceita envios, e cada alteração fica na auditoria com o valor anterior.
 - A **média** é a média simples das notas dos jurados **ativos** na escala. Um jurado suspenso continua aparecendo no quadro, mas sai da média.
-- No **ranking**, médias iguais dividem a posição. "Parcial" indica que ainda faltam notas.
+- No **ranking**, a posição é sempre calculada **dentro da formação** (solo, duo, trio, grupo) e dos filtros de faixa e categoria escolhidos. Médias iguais dividem a posição. "Parcial" indica que ainda faltam notas.
+- **Filtros do pódio:** Formação (abas ou seletor), Faixa e Categoria. O título de cada pódio mostra os filtros aplicados (ex.: "Pódio · Solos · Adulto"). Em **Todas as formações**, aparece um pódio para cada formação, cada um com a sua própria classificação — nunca um pódio único misturando solos, duos, trios e grupos. O CSV exportado segue os mesmos filtros e traz a coluna `posicao_na_formacao`.
 
 **Grupos:** além de nome, cidade, responsável e contato, o cadastro guarda a equipe:
 - **integrantes**;
