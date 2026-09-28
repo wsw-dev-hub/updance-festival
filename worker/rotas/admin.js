@@ -840,7 +840,7 @@ export async function listarGravacoes(request, env, { id }) {
   await exigirEvento(request, env, id);
   const { results } = await env.DB.prepare(
     `SELECT g.id, g.versao, g.identificador, g.identificador_publico, g.status, g.aprovada, g.duracao_ms, g.tamanho,
-            g.sha256, g.iniciado_em, g.finalizado_em, c.id AS coreografia_id, c.numero, c.nome AS coreografia,
+            g.sha256, g.iniciado_em, g.finalizado_em, c.id AS coreografia_id, c.numero, c.nome AS coreografia, c.faixa,
             gr.nome AS grupo, j.nome AS jurado, ej.ordem AS jurado_ordem,
             (SELECT COUNT(*) FROM trechos t WHERE t.gravacao_id = g.id) AS trechos,
             (SELECT n.nota FROM notas n WHERE n.coreografia_id = g.coreografia_id AND n.jurado_id = g.jurado_id) AS nota

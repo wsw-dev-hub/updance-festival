@@ -7,12 +7,13 @@ import { sha256Hex } from '../lib/cripto.js';
 import { auditar } from '../lib/auditoria.js';
 import { servirAudio } from '../lib/midia.js';
 
+const FAIXAS = { baby: 'Baby', infantil: 'Infantil', juvenil: 'Juvenil', adulto: 'Adulto', profissional: 'Profissional' };
 const RE_TOKEN = /^[A-Za-z0-9_-]{43}$/;
 
 async function validarToken(env, token) {
   if (!RE_TOKEN.test(token)) throw new ErroHttp(404, 'Link inválido', 'link_invalido');
   const link = await env.DB.prepare(
-    `SELECT l.*, c.numero, c.nome AS coreografia, gr.nome AS grupo, e.nome AS evento, e.anonimizar_jurados
+    `SELECT l.*, c.numero, c.nome AS coreografia, c.faixa, gr.nome AS grupo, e.nome AS evento, e.anonimizar_jurados
        FROM links_entrega l
        JOIN coreografias c ON c.id = l.coreografia_id
        LEFT JOIN grupos gr ON gr.id = c.grupo_id
@@ -75,7 +76,7 @@ export async function paginaEntrega(request, env, { token }) {
   const corpo = `
     <p class="evento">${esc(link.evento)}</p>
     <h1>${String(link.numero).padStart(3, '0')} · ${esc(link.coreografia)}</h1>
-    ${link.grupo ? `<p class="grupo">${esc(link.grupo)}</p>` : ''}
+    ${link.grupo || link.faixa ? `<p class="grupo">${esc([link.grupo, FAIXAS[link.faixa]].filter(Boolean).join(' · '))}</p>` : ''}
     <ul>${itens}</ul>
     <p class="aviso">Link pessoal. Não compartilhe. Disponível até ${new Date(link.expira_em).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.</p>`;
   return paginaHtml(`${link.coreografia} — comentários dos jurados`, corpo);

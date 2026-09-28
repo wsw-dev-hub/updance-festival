@@ -149,7 +149,7 @@ async function carregarQuadro() {
 
 function montarFiltroFormacao() {
   const sel = $('filtro-formacao-notas');
-  const atual = sel.value;
+  const atual = sel.options.length ? sel.value : '*'; // 1ª montagem: "todas"
   const tem = new Set(estado.quadro.coreografias.map((c) => c.formacao || ''));
   sel.replaceChildren(
     el('option', { value: '*', textContent: 'Todas as formações' }),
@@ -162,7 +162,7 @@ function montarFiltroFormacao() {
 
 /** Select de faixa só com as faixas que existem na lista (some quando nenhuma coreografia tem faixa). */
 function montarFiltroFaixa(sel, lista) {
-  const atual = sel.value;
+  const atual = sel.options.length ? sel.value : '*'; // 1ª montagem: "todas"
   const tem = new Set(lista.map((c) => c.faixa || ''));
   sel.replaceChildren(
     el('option', { value: '*', textContent: 'Todas as faixas' }),
@@ -254,7 +254,7 @@ function filtrarNotas(lista) {
     if (f !== '*' && (c.formacao || '') !== f) return false;
     if (fx !== '*' && (c.faixa || '') !== fx) return false;
     if (!q) return true;
-    return `${num(c.numero)} ${c.nome} ${c.grupo || ''} ${c.categoria || ''}`.toLowerCase().includes(q);
+    return `${num(c.numero)} ${c.nome} ${c.grupo || ''} ${c.categoria || ''} ${rotuloFaixa(c.faixa)}`.toLowerCase().includes(q);
   });
 }
 
@@ -354,7 +354,7 @@ function renderizarRanking() {
   const doSegmento = daFormacao.filter((c) => fx === '*' || (c.faixa || '') === fx);
   const cats = [...new Set(doSegmento.map((c) => c.categoria).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
   const sel = $('filtro-categoria');
-  const atual = sel.value;
+  const atual = sel.options.length ? sel.value : '*'; // 1ª montagem: "todas"
   sel.replaceChildren(el('option', { value: '*', textContent: 'Todas as categorias' }), ...cats.map((c) => el('option', { value: c, textContent: c })));
   sel.value = cats.includes(atual) ? atual : '*';
   sel.hidden = !cats.length;
@@ -444,7 +444,7 @@ function gravacoesFiltradas() {
   return estado.gravacoes.filter((g) => {
     if (jur !== '*' && g.jurado !== jur) return false;
     if (st !== '*' && statusDe(g) !== st) return false;
-    return !q || `${num(g.numero)} ${g.coreografia} ${g.grupo || ''}`.toLowerCase().includes(q);
+    return !q || `${num(g.numero)} ${g.coreografia} ${g.grupo || ''} ${rotuloFaixa(g.faixa)}`.toLowerCase().includes(q);
   });
 }
 
@@ -469,7 +469,7 @@ function renderizarGravacoes() {
             el('td', {}, el('span', { class: 'num', textContent: num(g.numero) })),
             el('td', {},
               el('div', { textContent: `${g.coreografia}${g.versao > 1 ? ` (v${g.versao})` : ''}` }),
-              g.grupo ? el('div', { class: 'muted', textContent: g.grupo }) : null,
+              g.grupo || g.faixa ? el('div', { class: 'muted', textContent: [g.grupo, rotuloFaixa(g.faixa)].filter(Boolean).join(' · ') }) : null,
               el('div', { class: 'ident', textContent: g.identificador }),
             ),
             el('td', {}, g.jurado_ordem ? el('span', { class: 'muted', textContent: `J${g.jurado_ordem} ` }) : null, g.jurado),
