@@ -4,6 +4,7 @@
 
 import * as api from './api.js';
 import * as fila from './fila.js';
+import * as notas from './notas.js';
 import { Gravador, suportado } from './gravador.js';
 import { Sincronizador } from './sincronizador.js';
 import { detectarPlataforma, verificarAmbiente, estadoPermissao, explicarErroMicrofone } from './microfone.js';
@@ -132,6 +133,7 @@ function aplicarDados(d) {
   };
   if (anterior?.dono && anterior.dono !== estado.sessao.dono) estado.indice = 0;
   estado.sessaoInvalida = false;
+  notas.mesclarServidor(estado.sessao.dono, d.notas || {});
   api.salvarCache(estado.sessao);
   const u = new URL(location.href);
   if (u.searchParams.get('evento') !== d.evento.id) {
@@ -397,6 +399,7 @@ async function mostrarPrincipal() {
   sinc.agendar(0);
   clearInterval(estado.timerSessao);
   estado.timerSessao = setInterval(atualizarDoServidor, 60_000);
+  enviarNotas();
 }
 
 /** Recarrega coreografias, horário e gravações do servidor (quando houver rede). */
@@ -414,6 +417,7 @@ async function atualizarDoServidor() {
     const novoIndice = estado.sessao.coreografias.findIndex((c) => c.id === atual);
     if (novoIndice >= 0) estado.indice = novoIndice;
     renderizarCoreografia();
+    enviarNotas();
   } catch (e) {
     if (e.status === 401) tratarSemSessao();
     else if (e.codigo === 'nao_jurado' && estado.gravador.estado === 'inactive') {
@@ -450,10 +454,13 @@ function montarLista() {
     ...estado.sessao.coreografias.map((c, i) => {
       const o = document.createElement('option');
       o.value = String(i);
-      o.textContent = `${num(c.numero)} · ${c.nome}${jaGravada(c.id) ? ' ✓' : ''}`;
+      const n = notas.notaDe(estado.sessao.dono, c.id);
+      const nota = n && n.nota !== null ? ` · nota ${notas.formatar(n.nota, casasNota())}${n.pendente ? '*' : ''}` : '';
+      o.textContent = `${num(c.numero)} · ${c.nome}${jaGravada(c.id) ? ' ✓' : ''}${nota}`;
       return o;
     }),
   );
+  $('lista-coreografias').value = String(estado.indice); // reconstruir a lista não pode trocar a coreografia exibida
 }
 
 function renderizarCoreografia() {
@@ -472,6 +479,89 @@ function renderizarCoreografia() {
   $('btn-anterior').disabled = gravando || estado.indice <= 0;
   $('btn-proxima').disabled = gravando || estado.indice >= estado.sessao.coreografias.length - 1;
   $('lista-coreografias').disabled = gravando;
+  renderizarNota();
+}
+
+/* ------------------------------ Nota da coreografia ------------------------------ */
+
+const casasNota = () => estado.sessao?.evento?.nota_casas ?? 1;
+const passoNota = () => (casasNota() === 0 ? 1 : 0.5);
+
+/** Mostra a nota da coreografia atual e o estado dela (salva, aguardando rede, recusada). */
+function renderizarNota() {
+  const c = coreografiaAtual();
+  const ev = estado.sessao.evento;
+  const casas = casasNota();
+  $('nota-area').hidden = !c;
+  if (!c) return;
+  $('nota-escala').textContent = `de ${notas.formatar(ev.nota_min ?? 0, casas)} a ${notas.formatar(ev.nota_max ?? 10, casas)}`;
+  const n = notas.notaDe(estado.sessao.dono, c.id);
+  const campo = $('campo-nota');
+  if (document.activeElement !== campo || campo.dataset.coreografia !== c.id) {
+    campo.value = n && n.nota !== null ? notas.formatar(n.nota, casas) : '';
+    campo.dataset.coreografia = c.id;
+  }
+  const aberto = agoraServidor() >= (ev.abre_em || 0);
+  for (const id of ['campo-nota', 'btn-nota-menos', 'btn-nota-mais', 'btn-nota-salvar']) $(id).disabled = !aberto;
+  const st = $('nota-status');
+  if (!aberto) {
+    st.className = 'nota-status';
+    st.textContent = 'A nota libera junto com a gravação, na abertura do evento.';
+  } else if (n?.erro) {
+    st.className = 'nota-status erro';
+    st.textContent = `Não foi aceita: ${n.erro}`;
+  } else if (n?.pendente) {
+    st.className = 'nota-status pendente';
+    st.textContent = n.nota === null ? 'Remoção aguardando conexão…' : `Nota ${notas.formatar(n.nota, casas)} guardada — será enviada quando houver conexão`;
+  } else if (n && n.nota !== null) {
+    st.className = 'nota-status ok';
+    st.textContent = `✓ Nota ${notas.formatar(n.nota, casas)} registrada`;
+  } else {
+    st.className = 'nota-status';
+    st.textContent = 'Sem nota ainda. Digite e toque em Salvar.';
+  }
+  $('nota-area').classList.toggle('sem-nota', !n || n.nota === null);
+}
+
+function ajustarNota(sinal) {
+  const ev = estado.sessao.evento;
+  const r = notas.interpretar($('campo-nota').value, ev);
+  const base = r.nota ?? (sinal > 0 ? (ev.nota_min ?? 0) - passoNota() : (ev.nota_max ?? 10) + passoNota());
+  const novo = Math.min(Math.max(base + sinal * passoNota(), ev.nota_min ?? 0), ev.nota_max ?? 10);
+  $('campo-nota').value = notas.formatar(novo, casasNota());
+}
+
+async function salvarNotaAtual(e) {
+  e?.preventDefault();
+  const c = coreografiaAtual();
+  if (!c) return;
+  const r = notas.interpretar($('campo-nota').value, estado.sessao.evento);
+  if (r.erro) {
+    $('nota-status').className = 'nota-status erro';
+    $('nota-status').textContent = r.erro;
+    $('campo-nota').focus();
+    return;
+  }
+  const atual = notas.notaDe(estado.sessao.dono, c.id);
+  if (r.nota === null && (!atual || atual.nota === null)) return renderizarNota();
+  notas.definir(estado.sessao.dono, c.id, r.nota);
+  $('campo-nota').blur();
+  if (!estado.offline) esconderAlerta();
+  vibrar(20);
+  montarLista();
+  renderizarCoreografia();
+  await enviarNotas();
+}
+
+/** Envia notas pendentes (chamado ao salvar, ao voltar a rede e na atualização periódica). */
+async function enviarNotas() {
+  if (!estado.sessao || estado.sessaoInvalida || !navigator.onLine) return;
+  const r = await notas.sincronizar(estado.sessao.dono);
+  if (r.sessaoInvalida) tratarSemSessao();
+  if (estado.sessao) {
+    montarLista();
+    renderizarNota();
+  }
 }
 
 function irPara(indice) {
@@ -552,7 +642,14 @@ async function encerrar() {
   aplicarEstadoVisual();
 
   montarLista();
-  if (estado.indice < estado.sessao.coreografias.length - 1) estado.indice++; // próxima coreografia
+  const semNota = notas.notaDe(estado.sessao.dono, g.coreografia_id)?.nota == null;
+  if (semNota) {
+    // Comentário salvo: fica na mesma coreografia para o jurado lançar a nota junto
+    mostrarAlerta(`Comentário da ${num(coreografiaAtual()?.numero ?? 0)} salvo. Agora registre a nota da coreografia.`);
+    setTimeout(() => $('campo-nota').focus(), 50);
+  } else if (estado.indice < estado.sessao.coreografias.length - 1) {
+    estado.indice++; // próxima coreografia
+  }
   renderizarCoreografia();
   sinc.agendar(0);
 
@@ -723,6 +820,14 @@ function ligarEventos() {
   $('btn-anterior').addEventListener('click', () => irPara(estado.indice - 1));
   $('btn-proxima').addEventListener('click', () => irPara(estado.indice + 1));
   $('lista-coreografias').addEventListener('change', (e) => irPara(Number(e.target.value)));
+  $('form-nota').addEventListener('submit', salvarNotaAtual);
+  $('btn-nota-menos').addEventListener('click', () => ajustarNota(-1));
+  $('btn-nota-mais').addEventListener('click', () => ajustarNota(1));
+  $('campo-nota').addEventListener('input', () => {
+    $('nota-status').className = 'nota-status editando';
+    $('nota-status').textContent = 'Toque em Salvar para registrar a nota.';
+  });
+  window.addEventListener('online', () => enviarNotas());
   $('btn-sair').addEventListener('click', sairDaConta);
   $('btn-testar-mic').addEventListener('click', testarMicrofone);
   $('btn-mic-continuar').addEventListener('click', concluirTesteMicrofone);

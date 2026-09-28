@@ -138,6 +138,21 @@
       </div>
       <select id="lista-coreografias" class="lista" aria-label="Escolher coreografia"></select>
 
+      <!-- NOTA DA COREOGRAFIA (registrada junto do comentário em áudio) -->
+      <section id="nota-area" class="nota-area" aria-labelledby="nota-titulo">
+        <div class="nota-cabeca">
+          <span id="nota-titulo" class="nota-titulo"><i class="mdi mdi-star-four-points-outline"></i> Nota da coreografia</span>
+          <span id="nota-escala" class="nota-escala"></span>
+        </div>
+        <form id="form-nota" class="nota-controle" autocomplete="off">
+          <button id="btn-nota-menos" class="btn btn-nota" type="button" aria-label="Diminuir nota">−</button>
+          <input id="campo-nota" class="campo-nota" type="text" inputmode="decimal" enterkeyhint="done" placeholder="—" aria-label="Nota" maxlength="6">
+          <button id="btn-nota-mais" class="btn btn-nota" type="button" aria-label="Aumentar nota">+</button>
+          <button id="btn-nota-salvar" class="btn btn-nota-salvar" type="submit"><i class="mdi mdi-check-bold"></i> Salvar</button>
+        </form>
+        <div id="nota-status" class="nota-status" role="status" aria-live="polite"></div>
+      </section>
+
       <div class="relogio">
         <div id="cronometro" class="cronometro">00:00</div>
         <div class="nivel" aria-hidden="true"><div id="nivel-barra" class="nivel-barra"></div></div>

@@ -14,8 +14,9 @@ import { randomToken } from './cripto.js';
 import { conferir, conferirFicticio } from './senha.js';
 
 export const PAPEIS = {
-  jurado: { tabela: 'jurados', cookie: 'm_session', prefixo: 'fest:msess', ttl: 60 * 60 * 24 * 7, role: 'member' },
-  admin: { tabela: 'admins', cookie: 'a_session', prefixo: 'fest:asess', ttl: 60 * 60 * 12, role: 'admin' },
+  jurado: { tabela: 'jurados', cookie: 'm_session', prefixo: 'fest:msess', ttl: 60 * 60 * 24 * 7, role: 'member', extras: '' },
+  // nivel: 'geral' (organização, vê tudo) ou 'responsavel' (só os eventos em evento_responsaveis)
+  admin: { tabela: 'admins', cookie: 'a_session', prefixo: 'fest:asess', ttl: 60 * 60 * 12, role: 'admin', extras: ', nivel' },
 };
 
 export const MAX_FALHAS = 5;
@@ -63,7 +64,7 @@ export async function obterConta(request, env, papel) {
   const p = PAPEIS[papel];
   const s = await lerSessao(env, papel, readCookie(request, p.cookie));
   if (!s || s.role !== p.role) return null;
-  const conta = await env.DB.prepare(`SELECT id, nome, email, trocar_senha, sessao_versao, ativo FROM ${p.tabela} WHERE id = ?1`)
+  const conta = await env.DB.prepare(`SELECT id, nome, email, trocar_senha, sessao_versao, ativo${p.extras} FROM ${p.tabela} WHERE id = ?1`)
     .bind(s.id)
     .first();
   if (!conta || !conta.ativo || conta.sessao_versao !== s.v) return null;

@@ -17,8 +17,9 @@
  *   GET  /api/admin/me          → admin logado (ou 401)
  *
  * FESTIVAL:
- *   /api/sessao, /api/gravacoes/*        app do jurado (exige m_session)
- *   /api/admin/*                         área de admin (exige a_session)
+ *   /api/sessao, /api/gravacoes/*, /api/notas/*   app do jurado (exige m_session)
+ *   /api/admin/*                                  área de admin (exige a_session)
+ *       nível "geral": tudo · nível "responsavel": só os seus eventos (tela /admin/evento/)
  *   /ouvir/<token>                       entrega pública ao participante
  *
  * Páginas protegidas: /admin/* (sessão de admin → senão /admin-login/).
@@ -57,6 +58,7 @@ const r = new Roteador()
   .rota('PUT', '/api/gravacoes/:id', jurado.criarGravacao)
   .rota('PUT', '/api/gravacoes/:id/trechos/:seq', jurado.enviarTrecho)
   .rota('POST', '/api/gravacoes/:id/finalizar', jurado.finalizarGravacao)
+  .rota('PUT', '/api/notas/:coreografia', jurado.salvarNota)
 
   // ---- ADMIN: cadastros ----
   .rota('GET', '/api/admin/admins', admin.listarAdmins)
@@ -79,10 +81,14 @@ const r = new Roteador()
   .rota('PATCH', '/api/admin/eventos/:id', admin.atualizarEvento)
   .rota('POST', '/api/admin/eventos/:id/jurados', admin.escalarJurado)
   .rota('PATCH', '/api/admin/eventos/:id/jurados/:jurado', admin.atualizarEscala)
+  .rota('POST', '/api/admin/eventos/:id/responsaveis', admin.adicionarResponsavel)
+  .rota('DELETE', '/api/admin/eventos/:id/responsaveis/:admin', admin.removerResponsavel)
+  .rota('GET', '/api/admin/eventos/:id/notas', admin.quadroNotas)
   .rota('POST', '/api/admin/eventos/:id/coreografias', admin.adicionarCoreografias)
   .rota('GET', '/api/admin/eventos/:id/gravacoes', admin.listarGravacoes)
   .rota('GET', '/api/admin/gravacoes/:id/audio', admin.ouvirGravacao)
   .rota('POST', '/api/admin/gravacoes/:id/aprovar', admin.aprovarGravacao)
+  .rota('DELETE', '/api/admin/coreografias/:id', admin.excluirCoreografia)
   .rota('POST', '/api/admin/coreografias/:id/link', admin.criarLinkEntrega)
   .rota('POST', '/api/admin/coreografias/:id/revogar-links', admin.revogarLinks)
   .rota('GET', '/api/admin/auditoria', admin.listarAuditoria)
@@ -108,6 +114,9 @@ export default {
           if (!a) destino.searchParams.set('next', pathname + url.search);
           return Response.redirect(destino.toString(), 302);
         }
+        // Responsável de evento: só a tela exclusiva do evento (o dashboard geral é da organização)
+        const telaEvento = pathname === '/admin/evento' || pathname.startsWith('/admin/evento/');
+        if (a.nivel !== 'geral' && !telaEvento) return Response.redirect(new URL('/admin/evento/', url.origin).toString(), 302);
         const resp = await env.ASSETS.fetch(request);
         const h = new Headers(resp.headers);
         h.set('Cache-Control', 'no-store');

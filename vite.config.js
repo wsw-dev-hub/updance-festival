@@ -35,7 +35,8 @@ const _adminGateDev = {
   configureServer(server) {
     server.middlewares.use(async (req, res, next) => {
       const url = req.url || ''
-      if (!/^\/admin(\/|\/index\.html)?(\?|$)/.test(url)) return next()
+      // páginas da área de admin (/admin/, /admin/evento/…) — não os arquivos .js/.css
+      if (!/^\/admin(\/[^.?]*)?(\/index\.html)?(\?|$)/.test(url)) return next()
       try {
         const r = await fetch(`${WORKER_DEV}/api/admin/me`, { headers: { cookie: req.headers.cookie || '' } })
         const eu = r.ok ? await r.json() : null
@@ -44,7 +45,7 @@ const _adminGateDev = {
         console.warn('[admin-gate] Worker indisponível em', WORKER_DEV, '— rode `npm run dev:worker`')
       }
       res.statusCode = 302
-      res.setHeader('Location', `/admin-login/?next=${encodeURIComponent('/admin/')}`)
+      res.setHeader('Location', `/admin-login/?next=${encodeURIComponent(url)}`)
       res.end()
     })
   },
@@ -86,7 +87,8 @@ export default defineConfig(async ({ command }) => ({
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),                          // app do jurado (PWA)
-        admin: resolve(__dirname, 'admin/index.html'),                   // área de admin
+        admin: resolve(__dirname, 'admin/index.html'),                   // dashboard da organização
+        'admin-evento': resolve(__dirname, 'admin/evento/index.html'),   // tela exclusiva de cada evento
         'admin-login': resolve(__dirname, 'admin-login/index.html'),     // login da organização
         'reset-senha': resolve(__dirname, 'reset-senha/index.html'),     // nova senha pelo link do e-mail
         404: resolve(__dirname, '404.html'),                             // not_found_handling = "404-page"

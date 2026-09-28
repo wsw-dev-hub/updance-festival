@@ -5,7 +5,36 @@ Sistema para jurados de festivais gravarem comentários em áudio (gravar / paus
 Projeto único:
 - **Vite** gera as páginas em `dist/`;
 - **`wrangler.toml`** publica o Worker (`worker/index.js`) com esses arquivos;
-- **`schema.sql`** tem o banco inteiro, em um arquivo só, sem migrações.
+- **`schema.sql`** tem o banco inteiro, em um arquivo só, sem migrações. Para um banco que já recebeu a versão anterior, há o **`atualizacao-notas-ranking.sql`**.
+
+## Telas
+
+| Tela | Quem usa | O que tem |
+|---|---|---|
+| `/` | jurados | Gravação do comentário em áudio **e nota da coreografia** (funciona sem internet: a nota fica guardada e é enviada quando a rede volta) |
+| `/admin/` | organização (nível **geral**) | Dashboard: cartões dos eventos, jurados, grupos, administradores, auditoria |
+| `/admin/evento/?id=…` | organização e **responsáveis do evento** | Tela exclusiva de cada evento: **Notas** (jurado × coreografia, com status dos áudios e média automática), **Ranking** (pódio das 3 maiores médias + lista completa, por solos, duos, trios e grupos), Áudios, Coreografias, Jurados, Responsáveis, Auditoria |
+
+**Níveis de administrador:**
+- **Geral:** a organização. Acessa tudo e cria eventos.
+- **Responsável de evento:** entra direto na tela dos eventos ligados a ele e tem autonomia sobre eles:
+  - edita dados e escala de notas;
+  - escala jurados por e-mail;
+  - cadastra coreografias;
+  - aprova áudios, gera links de entrega e acompanha notas e ranking.
+
+  Ele não vê contas, outros eventos nem o dashboard.
+
+**Notas e médias:**
+- A escala é definida por evento: mínima, máxima e casas decimais. O padrão é **0 a 10, uma casa**.
+- O jurado pode alterar a nota enquanto o evento aceita envios, e cada alteração fica na auditoria com o valor anterior.
+- A **média** é a média simples das notas dos jurados **ativos** na escala. Um jurado suspenso continua aparecendo no quadro, mas sai da média.
+- No **ranking**, médias iguais dividem a posição. "Parcial" indica que ainda faltam notas.
+
+**Formação da coreografia** (segmenta o ranking):
+- `solo`, `duo`, `trio` ou `grupo`, informada no cadastro ou no CSV (coluna `formacao`).
+- Aceita sinônimos: "Solo feminino", "dupla", "conjunto"…
+- Em vez da formação, o CSV pode trazer a coluna `integrantes` com o número de bailarinos: 1 = solo, 2 = duo, 3 = trio, 4 ou mais = grupo.
 
 ```
 GitHub ──► Cloudflare (Workers Builds)
@@ -72,7 +101,19 @@ npx wrangler d1 execute updance-festival_db --remote --file=schema.sql
 SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name;
 ```
 
-O resultado deve ter **10 tabelas**: `admins, auditoria, coreografias, evento_jurados, eventos, gravacoes, grupos, jurados, links_entrega, trechos`.
+O resultado deve ter **12 tabelas**: `admins, auditoria, coreografias, evento_jurados, evento_responsaveis, eventos, gravacoes, grupos, jurados, links_entrega, notas, trechos`.
+
+> **Já executou o `schema.sql` da versão anterior (10 tabelas)?** Execute **uma vez** o `atualizacao-notas-ranking.sql`, no Console ou pelo terminal:
+>
+> ```
+> npx wrangler d1 execute updance-festival_db --remote --file=atualizacao-notas-ranking.sql
+> ```
+>
+> Ele acrescenta:
+> - as colunas de nível do admin, de escala de notas do evento e de formação da coreografia;
+> - as tabelas `notas` e `evento_responsaveis`.
+>
+> Nada é apagado. Se for executado de novo, os `ALTER TABLE` apenas avisam "duplicate column name".
 
 > **Se o banco já tinha tabelas de uma versão anterior deste projeto,** confira com a consulta abaixo:
 >
@@ -122,11 +163,13 @@ Não cadastre variáveis de texto (**Text**) pelo painel. As variáveis do `[var
 
 1. Abra `https://updance-festival.<sua-conta>.workers.dev/admin-login/` e clique em **Primeiro acesso (chave de setup)**.
 2. Informe a `ADMIN_SETUP_KEY`, o seu nome, o seu e-mail e uma senha com pelo menos 10 caracteres, letras e números. Depois entre com esse e-mail e essa senha.
-3. Na área de admin, faça nesta ordem:
-   1. **Jurados:** cadastre cada um. Anote a senha provisória, que aparece uma única vez.
-   2. **Grupos:** opcional; também são criados pelo CSV.
-   3. **Eventos → Novo evento**, depois **Escala de jurados** e **Coreografias** (CSV `numero;nome;grupo;categoria`).
-4. Envie a cada jurado o **link do app** e a senha provisória. No 1º acesso, ele cria a própria senha.
+3. No dashboard, abra **Eventos → Novo evento**. Informe as datas e a escala de notas; depois de criar, você cai na **tela do evento**.
+4. Na tela do evento, faça nesta ordem:
+   1. **Coreografias:** importe o CSV `numero;nome;grupo;categoria;formacao`.
+   2. **Jurados:** informe nome e e-mail de cada um. Quem não tem conta recebe uma senha provisória, que aparece uma única vez.
+   3. **Responsáveis:** opcional. Informe nome e e-mail de quem vai cuidar do evento; ele recebe uma senha provisória e acesso só a esta tela.
+5. Envie a cada jurado o **link do app** e a senha provisória. No 1º acesso, ele cria a própria senha. Envie ao responsável o endereço `/admin-login/` e a senha provisória dele.
+6. Durante o evento, a aba **Notas** atualiza sozinha a cada 15 s. O **Ranking** mostra o pódio de cada formação e exporta CSV.
 
 ### Passo 9 — Verificação rápida
 
@@ -148,10 +191,13 @@ Não cadastre variáveis de texto (**Text**) pelo painel. As variáveis do `[var
 | `POST /api/member/forgot` `{email}` | jurado | Envia o link `/reset-senha/?token=…` (30 min, uso único) |
 | `POST /api/member/reset` `{token, password}` | jurado | Grava a nova senha e derruba as sessões abertas |
 | `POST /api/member/senha` `{atual, nova}` | jurado | Troca a própria senha (obrigatória no 1º acesso) |
+| `PUT /api/notas/:coreografia` `{nota}` | jurado | Lança ou altera a nota (`null` apaga) |
 | `GET /api/me` | jurado | Jurado logado, ou 401 |
 | `POST /api/admin/setup` `{setup_key, email, password, nome}` | organização | Cria ou redefine um admin com a `ADMIN_SETUP_KEY` |
 | `POST /api/admin/login` `{email, password}` | admin | Cria a sessão (cookie `a_session`, 12 h) |
-| `POST /api/admin/logout` · `POST /api/admin/senha` · `GET /api/admin/me` | admin | Sair, trocar a senha, identificar |
+| `POST /api/admin/logout` · `POST /api/admin/senha` · `GET /api/admin/me` | admin | Sair, trocar a senha, identificar (`nivel`: geral/responsavel) |
+| `GET /api/admin/eventos/:id/notas` | geral ou responsável | Quadro de notas: jurado × coreografia, status dos áudios, média e contagem |
+| `POST` / `DELETE /api/admin/eventos/:id/responsaveis` | geral | Liga ou desliga responsáveis do evento |
 
 **Segurança:**
 - **Senhas:** PBKDF2-SHA256 com 100.000 iterações, como no blog. As contas são bloqueadas por 15 min após 5 erros; o setup também bloqueia o IP após 5 chaves erradas.
@@ -189,10 +235,11 @@ npm run dev                      # terminal 2: Vite com HTTPS em https://localho
 ## Estrutura
 
 ```
-index.html · admin/ · admin-login/ · reset-senha/ · 404.html   páginas (entradas do Vite)
+index.html · admin/ · admin/evento/ · admin-login/ · reset-senha/ · 404.html   páginas (entradas do Vite)
 src/            JS/CSS do front (empacotados pelo Vite)
 public/         copiado como está: sw.js, manifest, _headers, js/tema.js, images/icons/
 worker/         index.js (rotas de acesso + roteamento) · lib/ · rotas/
 schema.sql      banco completo (arquivo único)
+atualizacao-notas-ranking.sql   só para bancos criados com a versão anterior do schema.sql
 vite.config.js · wrangler.toml · package.json
 ```

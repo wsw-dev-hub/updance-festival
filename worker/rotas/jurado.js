@@ -22,6 +22,7 @@ function eventoPublico(e) {
   return {
     id: e.id, nome: e.nome, data: e.data, local: e.local, fuso: e.fuso,
     abre_em: e.abre_em, fecha_em: e.fecha_em, duracao_max_s: e.duracao_max_s,
+    nota_min: e.nota_min, nota_max: e.nota_max, nota_casas: e.nota_casas,
   };
 }
 
@@ -63,13 +64,14 @@ export async function sessao(request, env) {
   };
   if (!sel) return json({ ...base, evento: null });
 
-  const [coreografias, gravacoes] = await env.DB.batch([
+  const [coreografias, gravacoes, notas] = await env.DB.batch([
     env.DB.prepare(
-      `SELECT c.id, c.numero, c.nome, g.nome AS grupo, c.categoria
+      `SELECT c.id, c.numero, c.nome, g.nome AS grupo, c.categoria, c.formacao
          FROM coreografias c LEFT JOIN grupos g ON g.id = c.grupo_id
         WHERE c.evento_id = ?1 ORDER BY c.numero`,
     ).bind(sel.id),
     env.DB.prepare('SELECT id, coreografia_id, versao, status FROM gravacoes WHERE jurado_id = ?1 AND evento_id = ?2 ORDER BY criado_em').bind(m.id, sel.id),
+    env.DB.prepare('SELECT coreografia_id, nota, atualizado_em FROM notas WHERE jurado_id = ?1 AND evento_id = ?2').bind(m.id, sel.id),
   ]);
   return json({
     ...base,
@@ -77,7 +79,57 @@ export async function sessao(request, env) {
     jurado: { nome: m.nome, ordem: sel.jurado_ordem },
     coreografias: coreografias.results,
     gravacoes: gravacoes.results,
+    notas: Object.fromEntries(notas.results.map((n) => [n.coreografia_id, n.nota])),
   });
+}
+
+/** Valida a nota na escala do evento (mín., máx. e casas decimais). */
+export function validarNota(valor, evento) {
+  const n = typeof valor === 'string' ? Number(valor.replace(',', '.')) : Number(valor);
+  if (!Number.isFinite(n)) throw new ErroHttp(422, 'Nota inválida', 'nota_invalida');
+  if (n < evento.nota_min || n > evento.nota_max) {
+    throw new ErroHttp(422, `A nota deve ficar entre ${evento.nota_min} e ${evento.nota_max}`, 'nota_fora_da_escala');
+  }
+  const fator = 10 ** evento.nota_casas;
+  if (Math.abs(Math.round(n * fator) - n * fator) > 1e-6) {
+    throw new ErroHttp(422, `Use no máximo ${evento.nota_casas} casa(s) decimal(is)`, 'nota_casas');
+  }
+  return Math.round(n * fator) / fator;
+}
+
+/* PUT /api/notas/:coreografia  { nota }   (nota: null apaga)
+   Nota do jurado para a coreografia, registrada junto do comentário em áudio. Pode ser alterada
+   enquanto o evento aceita envios (mesma janela das gravações). */
+export async function salvarNota(request, env, { coreografia }) {
+  const m = await exigirJurado(request, env);
+  const c = await env.DB.prepare('SELECT id, evento_id, numero, nome FROM coreografias WHERE id = ?1').bind(coreografia).first();
+  if (!c) throw new ErroHttp(404, 'Coreografia não encontrada', 'nao_encontrada');
+  const evento = await carregarEvento(env, c.evento_id);
+  if (!(await juradoNoEvento(env, m, evento.id))) throw new ErroHttp(403, 'Você não é jurado deste evento', 'nao_jurado');
+  const agora = Date.now();
+  if (agora < evento.abre_em) throw new ErroHttp(403, 'O evento ainda não foi aberto para avaliação', 'evento_nao_aberto');
+  if (!dentroDaJanelaDeEnvio(evento)) throw new ErroHttp(403, 'Prazo de avaliação encerrado', 'prazo_encerrado');
+
+  const { nota } = await lerJson(request, 1024);
+  const anterior = await env.DB.prepare('SELECT nota FROM notas WHERE coreografia_id = ?1 AND jurado_id = ?2').bind(c.id, m.id).first();
+  if (nota === null || nota === '') {
+    await env.DB.prepare('DELETE FROM notas WHERE coreografia_id = ?1 AND jurado_id = ?2').bind(c.id, m.id).run();
+    if (anterior) await auditar(env, request, { eventoId: evento.id, ator: ator(m), acao: 'nota_removida', alvo: c.id, detalhes: { numero: c.numero, anterior: anterior.nota } });
+    return json({ ok: true, nota: null });
+  }
+  const valor = validarNota(nota, evento);
+  if (anterior?.nota === valor) return json({ ok: true, nota: valor });
+  await env.DB.prepare(
+    `INSERT INTO notas (coreografia_id, jurado_id, evento_id, nota, criado_em, atualizado_em) VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+     ON CONFLICT (coreografia_id, jurado_id) DO UPDATE SET nota = excluded.nota, atualizado_em = excluded.atualizado_em`,
+  )
+    .bind(c.id, m.id, evento.id, valor, agora)
+    .run();
+  await auditar(env, request, {
+    eventoId: evento.id, ator: ator(m), acao: anterior ? 'nota_alterada' : 'nota_lancada', alvo: c.id,
+    detalhes: { numero: c.numero, nota: valor, ...(anterior ? { anterior: anterior.nota } : {}) },
+  });
+  return json({ ok: true, nota: valor });
 }
 
 /** Gravação do próprio jurado, com a escala no evento ativa. 404 quando é de outra pessoa: não revela que existe. */

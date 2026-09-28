@@ -68,6 +68,9 @@ export const trocarSenha = (nova, atual) => chamar('POST', '/api/member/senha', 
 export const esqueciSenha = (email) => chamar('POST', '/api/member/forgot', { json: { email } });
 export const sair = () => chamar('POST', '/api/member/logout', { tempoLimite: 8000 });
 
+export const salvarNota = (coreografiaId, nota) =>
+  chamar('PUT', `/api/notas/${encodeURIComponent(coreografiaId)}`, { json: { nota }, tempoLimite: 15_000 });
+
 export const registrarGravacao = (g) =>
   chamar('PUT', `/api/gravacoes/${g.id}`, { json: { coreografia_id: g.coreografia_id, mime: g.mime, iniciado_em: g.iniciado_em } });
 

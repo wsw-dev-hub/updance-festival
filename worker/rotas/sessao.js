@@ -66,7 +66,7 @@ function logout(papel) {
 function quemSouEu(papel) {
   return async (request, env) => {
     const c = await exigirConta(request, env, papel, { permitirTrocaPendente: true });
-    return json({ id: c.id, nome: c.nome, email: c.email, role: PAPEIS[papel].role, trocar_senha: !!c.trocar_senha });
+    return json({ id: c.id, nome: c.nome, email: c.email, role: PAPEIS[papel].role, trocar_senha: !!c.trocar_senha, ...(c.nivel ? { nivel: c.nivel } : {}) });
   };
 }
 

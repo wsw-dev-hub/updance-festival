@@ -27,7 +27,7 @@
 
 <main class="admin-main">
   <nav class="tabs tabs-principal" role="tablist" aria-label="Seções">
-    <button class="tab is-active" data-secao="eventos" role="tab"><i class="mdi mdi-calendar-star"></i> Eventos</button>
+    <button class="tab is-active" data-secao="eventos" role="tab"><i class="mdi mdi-calendar-star"></i> Eventos <span id="c-eventos" class="contador"></span></button>
     <button class="tab" data-secao="jurados" role="tab"><i class="mdi mdi-account-star"></i> Jurados <span id="c-jurados-total" class="contador"></span></button>
     <button class="tab" data-secao="grupos" role="tab"><i class="mdi mdi-account-group"></i> Grupos <span id="c-grupos" class="contador"></span></button>
     <button class="tab" data-secao="admins" role="tab"><i class="mdi mdi-shield-account"></i> Administradores</button>
@@ -53,97 +53,30 @@
   <!-- ============================ EVENTOS ============================ -->
   <section id="secao-eventos" class="secao">
     <section class="card">
-      <div class="card-head"><h1>Comentários dos <em>jurados</em></h1></div>
-      <div class="linha">
-        <select id="sel-evento" aria-label="Evento"></select>
+      <div class="card-head">
+        <h1>Eventos do <em>festival</em></h1>
         <button id="btn-atualizar" class="btn btn-sec" type="button"><i class="mdi mdi-refresh"></i> Atualizar</button>
-        <button id="btn-editar-evento" class="btn btn-sec" type="button" hidden><i class="mdi mdi-pencil"></i> Editar evento</button>
       </div>
-      <div id="link-jurados" class="destaque" hidden>
-        <span><i class="mdi mdi-link-variant"></i> Link do app para os jurados:</span>
-        <code id="link-jurados-url"></code>
-        <button id="btn-copiar-link" class="btn btn-sec" type="button"><i class="mdi mdi-content-copy"></i> Copiar</button>
-      </div>
+      <p class="muted">Cada evento tem a sua tela exclusiva: notas, ranking, áudios, coreografias e escala. Os responsáveis de cada evento entram direto nela.</p>
       <details id="det-evento">
-        <summary><i class="mdi mdi-plus-circle-outline"></i> <span id="det-evento-titulo">Novo evento</span></summary>
+        <summary><i class="mdi mdi-plus-circle-outline"></i> Novo evento</summary>
         <form id="form-evento" class="grade">
           <label>Nome <input name="nome" required maxlength="120" placeholder="Festival UpDance 2026"></label>
           <label>Data <input name="data" type="date" required></label>
           <label>Local <input name="local" maxlength="160" placeholder="Teatro, cidade"></label>
-          <label>Jurados podem gravar a partir de <input name="abre_em" type="datetime-local"></label>
+          <label>Jurados podem avaliar a partir de <input name="abre_em" type="datetime-local"></label>
           <label>Encerramento <input name="fecha_em" type="datetime-local"></label>
           <label>Duração máxima por comentário (min) <input name="duracao_max_min" type="number" min="1" max="30" value="8"></label>
+          <label>Nota mínima <input name="nota_min" type="number" min="0" max="1000" step="any" value="0"></label>
+          <label>Nota máxima <input name="nota_max" type="number" min="1" max="1000" step="any" value="10"></label>
+          <label>Casas decimais da nota
+            <select name="nota_casas"><option value="0">0 (ex.: 8)</option><option value="1" selected>1 (ex.: 8,5)</option><option value="2">2 (ex.: 8,75)</option></select></label>
           <label class="check"><input name="anonimizar_jurados" type="checkbox"> Participantes veem "Jurado 1, 2…" em vez do nome</label>
-          <div class="linha">
-            <button type="submit" class="btn btn-hot" id="btn-salvar-evento">Criar evento</button>
-            <button type="button" class="btn btn-sec" id="btn-cancelar-evento" hidden>Cancelar edição</button>
-          </div>
+          <div class="linha"><button type="submit" class="btn btn-hot"><i class="mdi mdi-calendar-plus"></i> Criar evento</button></div>
         </form>
       </details>
     </section>
-
-    <div id="conteudo-evento" hidden>
-      <nav class="tabs" role="tablist" aria-label="Evento">
-        <button class="tab is-active" data-tab="gravacoes" role="tab"><i class="mdi mdi-waveform"></i> Gravações <span id="c-gravacoes" class="contador"></span></button>
-        <button class="tab" data-tab="escala" role="tab"><i class="mdi mdi-gavel"></i> Escala de jurados <span id="c-escala" class="contador"></span></button>
-        <button class="tab" data-tab="coreografias" role="tab"><i class="mdi mdi-human-female-dance"></i> Coreografias <span id="c-coreografias" class="contador"></span></button>
-        <button class="tab" data-tab="auditoria-evento" role="tab"><i class="mdi mdi-history"></i> Auditoria do evento</button>
-      </nav>
-
-      <section id="panel-gravacoes" class="card panel">
-        <div class="card-head"><h2>Gravações</h2><span id="resumo-gravacoes" class="muted"></span></div>
-        <audio id="player" controls hidden></audio>
-        <div class="tabela-rolagem"><table>
-          <thead><tr><th>Nº</th><th>Coreografia</th><th>Jurado</th><th>Status</th><th>Duração</th><th>Ações</th></tr></thead>
-          <tbody id="tb-gravacoes"></tbody>
-        </table></div>
-      </section>
-
-      <section id="panel-escala" class="card panel" hidden>
-        <div class="card-head"><h2>Escala de jurados</h2></div>
-        <p class="muted">Escolha entre os jurados cadastrados (seção <strong>Jurados</strong>). A ordem define o nome anonimizado (Jurado 1, 2…).</p>
-        <form id="form-escala" class="linha">
-          <select id="sel-jurado-escala" aria-label="Jurado" required></select>
-          <button type="submit" class="btn btn-hot"><i class="mdi mdi-account-plus"></i> Escalar</button>
-        </form>
-        <div class="tabela-rolagem"><table>
-          <thead><tr><th>#</th><th>Jurado</th><th>E-mail</th><th>Situação</th><th>Ações</th></tr></thead>
-          <tbody id="tb-escala"></tbody>
-        </table></div>
-      </section>
-
-      <section id="panel-coreografias" class="card panel" hidden>
-        <div class="card-head"><h2>Coreografias</h2></div>
-        <form id="form-coreografia" class="grade grade-compacta">
-          <label>Nº <input name="numero" type="number" min="0" required></label>
-          <label>Nome <input name="nome" required maxlength="200"></label>
-          <label>Grupo <select name="grupo_id" id="sel-grupo-coreografia"></select></label>
-          <label>Categoria <input name="categoria" maxlength="100"></label>
-          <button type="submit" class="btn btn-hot"><i class="mdi mdi-plus"></i> Salvar</button>
-        </form>
-        <details>
-          <summary><i class="mdi mdi-file-upload-outline"></i> Importar CSV</summary>
-          <p class="muted">Colunas: <code>numero;nome;grupo;categoria</code>. Grupos que ainda não existem são criados. Números repetidos são atualizados.</p>
-          <textarea id="csv" rows="5" placeholder="numero;nome;grupo;categoria&#10;1;Bolero de Ravel;Cia. Movimento;Contemporâneo"></textarea>
-          <div class="linha">
-            <input id="arquivo-csv" type="file" accept=".csv,text/csv">
-            <button id="btn-importar" class="btn btn-hot" type="button">Importar</button>
-          </div>
-        </details>
-        <div class="tabela-rolagem"><table>
-          <thead><tr><th>Nº</th><th>Nome</th><th>Grupo</th><th>Categoria</th><th>Entrega ao participante</th></tr></thead>
-          <tbody id="tb-coreografias"></tbody>
-        </table></div>
-      </section>
-
-      <section id="panel-auditoria-evento" class="card panel" hidden>
-        <div class="card-head"><h2>Auditoria do evento</h2></div>
-        <div class="tabela-rolagem"><table>
-          <thead><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Alvo</th><th>Detalhes</th></tr></thead>
-          <tbody id="tb-auditoria-evento"></tbody>
-        </table></div>
-      </section>
-    </div>
+    <div id="grade-eventos" class="grade-eventos" aria-live="polite"></div>
   </section>
 
   <!-- ============================ JURADOS ============================ -->
@@ -185,13 +118,16 @@
   <!-- ============================ ADMINS ============================ -->
   <section id="secao-admins" class="secao card" hidden>
     <div class="card-head"><h2>Administradores</h2><span class="muted">Quem tem acesso a esta área.</span></div>
+    <p class="muted"><strong>Geral</strong>: acessa todo o festival. <strong>Responsável de evento</strong>: acessa só a tela dos eventos ligados a ele (ligue na aba <em>Responsáveis</em> da tela do evento).</p>
     <form id="form-admin" class="grade grade-compacta">
       <label>Nome <input name="nome" required maxlength="120"></label>
       <label>E-mail <input name="email" type="email" required maxlength="254"></label>
+      <label>Nível
+        <select name="nivel"><option value="geral">Geral (organização)</option><option value="responsavel">Responsável de evento</option></select></label>
       <button type="submit" class="btn btn-hot"><i class="mdi mdi-shield-plus"></i> Adicionar</button>
     </form>
     <div class="tabela-rolagem"><table>
-      <thead><tr><th>Nome</th><th>E-mail</th><th>Último acesso</th><th>Situação</th><th>Ações</th></tr></thead>
+      <thead><tr><th>Nome</th><th>E-mail</th><th>Nível / eventos</th><th>Último acesso</th><th>Situação</th><th>Ações</th></tr></thead>
       <tbody id="tb-admins"></tbody>
     </table></div>
   </section>
