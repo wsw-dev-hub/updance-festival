@@ -5,7 +5,7 @@ Sistema para jurados de festivais gravarem comentários em áudio (gravar / paus
 Projeto único:
 - **Vite** gera as páginas em `dist/`;
 - **`wrangler.toml`** publica o Worker (`worker/index.js`) com esses arquivos;
-- **`schema.sql`** tem o banco inteiro, em um arquivo só, sem migrações. Para um banco que já recebeu a versão anterior, há o **`atualizacao-notas-ranking.sql`**.
+- **`schema.sql`** tem o banco inteiro, em um arquivo só, sem migrações. Para um banco que já existia, há os arquivos de atualização `atualizacao-notas-ranking.sql` e `atualizacao-grupos-equipe.sql` (veja o passo 4).
 
 ## Telas
 
@@ -30,6 +30,23 @@ Projeto único:
 - O jurado pode alterar a nota enquanto o evento aceita envios, e cada alteração fica na auditoria com o valor anterior.
 - A **média** é a média simples das notas dos jurados **ativos** na escala. Um jurado suspenso continua aparecendo no quadro, mas sai da média.
 - No **ranking**, médias iguais dividem a posição. "Parcial" indica que ainda faltam notas.
+
+**Grupos:** além de nome, cidade, responsável e contato, o cadastro guarda a equipe:
+- **integrantes**;
+- **coreógrafo(a)/professor(a)**;
+- **diretores**;
+- **coordenadores**.
+
+Em cada campo vai um nome por linha. Também dá para separar os nomes com `;` ou `,`, e os repetidos são removidos. A lista de grupos mostra a equipe, e os integrantes aparecem num resumo que abre ao clicar.
+
+**Áudios dos jurados** (aba **Áudios** da tela do evento):
+- **Ouvir / Pausar** em cada linha, com um player que fica fixo no topo da aba enquanto a lista rola. A barra de avanço funciona, e os áudios ainda chegando tocam o que já foi recebido.
+- **Baixar** cada arquivo, com o nome completo do identificador. Os parciais saem como "Baixar parcial".
+- **Baixar ZIP** junta os áudios completos da lista filtrada, em pastas por coreografia.
+  - Filtros: jurado, situação e busca.
+  - O ZIP é montado no navegador, sem compressão, porque áudio já vem comprimido. Assim o Worker não estoura o limite de CPU do plano gratuito.
+  - Até 400 MB por ZIP; acima disso, filtre e baixe em partes.
+- **Formato:** o arquivo vem no formato gravado pelo aparelho, WebM (Android/Chrome) ou MP4 (iPhone). Se algum navegador não tocar um formato, o **Baixar** funciona sempre, e o arquivo abre no VLC ou em qualquer player atual.
 
 **Formação da coreografia** (segmenta o ranking):
 - `solo`, `duo`, `trio` ou `grupo`, informada no cadastro ou no CSV (coluna `formacao`).
@@ -114,6 +131,8 @@ O resultado deve ter **12 tabelas**: `admins, auditoria, coreografias, evento_ju
 > - as tabelas `notas` e `evento_responsaveis`.
 >
 > Nada é apagado. Se for executado de novo, os `ALTER TABLE` apenas avisam "duplicate column name".
+>
+> **Depois**, execute também, uma vez, o **`atualizacao-grupos-equipe.sql`**. Ele acrescenta ao `grupos` as colunas `integrantes`, `coreografo`, `diretores` e `coordenadores`. Banco criado com o `schema.sql` desta versão já tem tudo e não precisa de nenhum arquivo de atualização.
 
 > **Se o banco já tinha tabelas de uma versão anterior deste projeto,** confira com a consulta abaixo:
 >
@@ -240,6 +259,7 @@ src/            JS/CSS do front (empacotados pelo Vite)
 public/         copiado como está: sw.js, manifest, _headers, js/tema.js, images/icons/
 worker/         index.js (rotas de acesso + roteamento) · lib/ · rotas/
 schema.sql      banco completo (arquivo único)
-atualizacao-notas-ranking.sql   só para bancos criados com a versão anterior do schema.sql
+atualizacao-notas-ranking.sql   bancos criados antes das notas/ranking (executar 1º)
+atualizacao-grupos-equipe.sql   bancos criados antes da equipe dos grupos (executar 2º)
 vite.config.js · wrangler.toml · package.json
 ```

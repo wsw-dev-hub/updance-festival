@@ -246,11 +246,35 @@ export async function listarGrupos(request, env) {
   return json(results);
 }
 
+/** Lista de nomes (um por linha, ou separados por ";" / ","): limpa, sem vazios nem repetidos. */
+export function listaDeNomes(v, { maxNomes = 200, maxNome = 120 } = {}) {
+  if (v == null) return null;
+  const bruto = Array.isArray(v) ? v : String(v).split(/\r?\n|;|,/);
+  const vistos = new Set();
+  const nomes = [];
+  for (const n of bruto) {
+    const s = String(n).replace(/\s+/g, ' ').trim();
+    if (!s) continue;
+    if (s.length > maxNome) throw new ErroHttp(422, `Nome maior que ${maxNome} caracteres: "${s.slice(0, 30)}…"`, 'texto_longo');
+    const k = chaveNome(s);
+    if (vistos.has(k)) continue;
+    vistos.add(k);
+    nomes.push(s);
+  }
+  if (nomes.length > maxNomes) throw new ErroHttp(422, `Máximo de ${maxNomes} nomes por campo`, 'lista_longa');
+  return nomes.length ? nomes.join('\n') : null;
+}
+
+const CAMPOS_EQUIPE = { integrantes: { maxNomes: 200 }, coreografo: { maxNomes: 10 }, diretores: { maxNomes: 20 }, coordenadores: { maxNomes: 20 } };
+
 function camposGrupo(b, atual = {}) {
   const pegar = (k, max) => (b[k] !== undefined ? texto(b[k], max, false) || null : atual[k] ?? null);
   const nome = b.nome !== undefined ? texto(b.nome, 160) : atual.nome;
   const em = b.email !== undefined && b.email !== '' ? email(b.email) : b.email === '' ? null : atual.email ?? null;
-  return { nome, cidade: pegar('cidade', 120), responsavel: pegar('responsavel', 120), email: em, telefone: pegar('telefone', 40) };
+  const equipe = Object.fromEntries(
+    Object.entries(CAMPOS_EQUIPE).map(([k, lim]) => [k, b[k] !== undefined ? listaDeNomes(b[k], lim) : atual[k] ?? null]),
+  );
+  return { nome, cidade: pegar('cidade', 120), responsavel: pegar('responsavel', 120), email: em, telefone: pegar('telefone', 40), ...equipe };
 }
 
 /* POST /api/admin/grupos  (qualquer admin) */
@@ -263,9 +287,10 @@ export async function criarGrupo(request, env) {
   }
   const id = aleatorio(12);
   await env.DB.prepare(
-    'INSERT INTO grupos (id, nome, nome_chave, cidade, responsavel, email, telefone, criado_em) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)',
+    `INSERT INTO grupos (id, nome, nome_chave, cidade, responsavel, email, telefone, criado_em, integrantes, coreografo, diretores, coordenadores)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`,
   )
-    .bind(id, g.nome, chave, g.cidade, g.responsavel, g.email, g.telefone, Date.now())
+    .bind(id, g.nome, chave, g.cidade, g.responsavel, g.email, g.telefone, Date.now(), g.integrantes, g.coreografo, g.diretores, g.coordenadores)
     .run();
   await auditar(env, request, { ator: a.ator, acao: 'grupo_criado', alvo: g.nome });
   return json({ id, ...g }, 201);
@@ -279,8 +304,11 @@ export async function atualizarGrupo(request, env, { id }) {
   const chave = chaveNome(g.nome);
   const conflito = await env.DB.prepare('SELECT id FROM grupos WHERE nome_chave = ?1 AND id <> ?2').bind(chave, id).first();
   if (conflito) throw new ErroHttp(409, 'Já existe um grupo com este nome', 'grupo_existente');
-  await env.DB.prepare('UPDATE grupos SET nome = ?1, nome_chave = ?2, cidade = ?3, responsavel = ?4, email = ?5, telefone = ?6 WHERE id = ?7')
-    .bind(g.nome, chave, g.cidade, g.responsavel, g.email, g.telefone, id)
+  await env.DB.prepare(
+    `UPDATE grupos SET nome = ?1, nome_chave = ?2, cidade = ?3, responsavel = ?4, email = ?5, telefone = ?6,
+                       integrantes = ?7, coreografo = ?8, diretores = ?9, coordenadores = ?10 WHERE id = ?11`,
+  )
+    .bind(g.nome, chave, g.cidade, g.responsavel, g.email, g.telefone, g.integrantes, g.coreografo, g.diretores, g.coordenadores, id)
     .run();
   await auditar(env, request, { ator: a.ator, acao: 'grupo_atualizado', alvo: g.nome });
   return json({ id, ...g });

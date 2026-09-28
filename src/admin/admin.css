@@ -247,3 +247,31 @@ tr.top-1 .posicao { color: var(--udx-primary-hot); }
   .tabela-notas .col-fixa2 { min-width: 150px; }
   .admin-topbar .btn-sec .rotulo { display: none; }
 }
+
+/* Grupos: equipe e integrantes */
+.grade .campo-largo { grid-column: 1 / -1; }
+.grade .campo-meio { grid-column: span 1; }
+.grade textarea { font-family: var(--udx-font); font-size: 14px; resize: vertical; min-height: 44px; }
+.grade .dica { font-size: 11px; color: var(--faint); margin-left: 4px; }
+td.equipe { font-size: 13px; min-width: 200px; }
+td.equipe > div { margin-bottom: 3px; }
+.rotulo-equipe { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+details.integrantes summary { margin: 0; font-weight: 500; font-size: 13px; color: var(--udx-primary-hot); }
+details.integrantes ol { margin: 6px 0 0; padding-left: 20px; font-size: 13px; max-height: 220px; overflow: auto; }
+
+/* Áudios: player fixo e linha tocando */
+.barra-player {
+  position: sticky; top: 64px; z-index: 5; display: grid; gap: 6px; margin: 6px 0 10px; padding: 10px 12px;
+  border-radius: 14px; border: 1px solid var(--udx-border-hot); background: var(--udx-glass);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: var(--udx-glow);
+}
+.barra-player-info { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barra-player-info .mdi { color: var(--udx-primary-hot); }
+.barra-player audio { margin: 0; height: 40px; }
+tr.tocando td { background: color-mix(in srgb, var(--udx-primary-hot) 9%, transparent); }
+tr.tocando td:first-child { box-shadow: inset 3px 0 0 var(--udx-primary-hot); }
+#btn-zip:disabled { opacity: .5; }
+@media (max-width: 720px) {
+  .barra-player { top: 112px; }
+  #btn-zip { flex: 1 1 100%; justify-content: center; }
+}

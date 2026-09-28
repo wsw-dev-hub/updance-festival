@@ -104,13 +104,21 @@
       <label>Responsável <input name="responsavel" maxlength="120"></label>
       <label>E-mail <input name="email" type="email" maxlength="254"></label>
       <label>Telefone <input name="telefone" maxlength="40"></label>
+      <label class="campo-largo">Integrantes <span class="dica">um nome por linha</span>
+        <textarea name="integrantes" rows="4" maxlength="24000" placeholder="Ana Lima&#10;Bruno Souza&#10;Carla Mendes"></textarea></label>
+      <label class="campo-meio">Coreógrafo(a) / professor(a) <span class="dica">um por linha</span>
+        <textarea name="coreografo" rows="2" maxlength="1300"></textarea></label>
+      <label class="campo-meio">Diretores <span class="dica">um por linha</span>
+        <textarea name="diretores" rows="2" maxlength="2500"></textarea></label>
+      <label class="campo-meio">Coordenadores <span class="dica">um por linha</span>
+        <textarea name="coordenadores" rows="2" maxlength="2500"></textarea></label>
       <div class="linha">
         <button type="submit" class="btn btn-hot" id="btn-salvar-grupo"><i class="mdi mdi-plus"></i> Cadastrar</button>
         <button type="button" class="btn btn-sec" id="btn-cancelar-grupo" hidden>Cancelar edição</button>
       </div>
     </form>
     <div class="tabela-rolagem"><table>
-      <thead><tr><th>Nome</th><th>Cidade</th><th>Responsável</th><th>Contato</th><th>Coreografias</th><th>Ações</th></tr></thead>
+      <thead><tr><th>Grupo</th><th>Equipe</th><th>Integrantes</th><th>Contato</th><th>Coreografias</th><th>Ações</th></tr></thead>
       <tbody id="tb-grupos"></tbody>
     </table></div>
   </section>

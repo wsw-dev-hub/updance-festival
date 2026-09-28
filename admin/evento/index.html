@@ -148,12 +148,31 @@
 
   <!-- ============================ ÁUDIOS ============================ -->
   <section id="aba-gravacoes" class="card aba" hidden>
-    <div class="card-head"><h2>Áudios dos jurados</h2><span id="resumo-gravacoes" class="muted"></span></div>
-    <audio id="player" controls hidden></audio>
+    <div class="card-head">
+      <h2>Áudios dos jurados</h2>
+      <span id="resumo-gravacoes" class="muted"></span>
+    </div>
+    <div class="linha filtros">
+      <input id="busca-audios" type="search" placeholder="Buscar nº, coreografia ou grupo" aria-label="Buscar áudios">
+      <select id="filtro-jurado-audios" aria-label="Jurado"></select>
+      <select id="filtro-status-audios" aria-label="Situação do áudio">
+        <option value="*">Todas as situações</option>
+        <option value="completo">Completos</option>
+        <option value="aprovado">Aprovados</option>
+        <option value="gravando">Chegando (parciais)</option>
+      </select>
+      <button id="btn-zip" class="btn btn-hot" type="button"><i class="mdi mdi-folder-zip-outline"></i> <span id="btn-zip-texto">Baixar ZIP</span></button>
+    </div>
+    <!-- Player fixo no topo da aba enquanto a lista rola -->
+    <div id="barra-player" class="barra-player" hidden>
+      <div class="barra-player-info"><i class="mdi mdi-headphones"></i> <span id="player-titulo"></span></div>
+      <audio id="player" controls preload="metadata"></audio>
+    </div>
     <div class="tabela-rolagem"><table>
-      <thead><tr><th>Nº</th><th>Coreografia</th><th>Jurado</th><th>Nota</th><th>Status</th><th>Duração</th><th>Ações</th></tr></thead>
+      <thead><tr><th>Nº</th><th>Coreografia</th><th>Jurado</th><th>Nota</th><th>Status</th><th>Duração</th><th>Ouvir / baixar</th></tr></thead>
       <tbody id="tb-gravacoes"></tbody>
     </table></div>
+    <p class="muted">O ZIP reúne os áudios <strong>completos</strong> da lista filtrada, em pastas por coreografia. Cada arquivo leva o identificador completo (nº, coreografia, evento, jurado, data e hora).</p>
   </section>
 
   <!-- ============================ COREOGRAFIAS ============================ -->

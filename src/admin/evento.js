@@ -7,6 +7,7 @@ import {
   FORMACOES, rotuloFormacao, situacaoEvento, situacaoConta, copiar, mostrarSenha, ligarCaixaSenha, guardar, ler,
   trocarMinhaSenha, sair, baixarCsv,
 } from './comum.js';
+import { montarZip } from './zip.js';
 
 const CHAVE_ABA = 'udx-festival.evento.aba';
 const ABAS = ['notas', 'ranking', 'gravacoes', 'coreografias', 'jurados', 'responsaveis', 'auditoria', 'conta'];
@@ -20,6 +21,9 @@ const estado = {
   aba: 'notas',
   segmento: null,
   timer: null,
+  gravacoes: [],
+  tocando: null, // id da gravação no player da aba Áudios
+  baixando: false,
 };
 const geral = () => estado.eu?.nivel === 'geral';
 const casas = () => estado.quadro?.evento?.nota_casas ?? 1;
@@ -166,11 +170,30 @@ function flagAudio(a, jurado, c) {
   });
 }
 
-function tocar(player, gravacaoId, rotulo) {
+/**
+ * Áudio gravado pelo MediaRecorder às vezes chega sem duração no cabeçalho (WebM): o player mostra
+ * "Infinity" e não deixa avançar. Truque padrão: pular para o fim força o navegador a calcular a duração.
+ */
+function corrigirDuracao(player) {
+  if (player.dataset.corrigido) return;
+  player.dataset.corrigido = '1';
+  player.addEventListener('loadedmetadata', () => {
+    if (player.duration !== Infinity) return;
+    const voltar = () => {
+      player.removeEventListener('timeupdate', voltar);
+      player.currentTime = 0;
+    };
+    player.addEventListener('timeupdate', voltar);
+    player.currentTime = 1e101;
+  });
+}
+
+function tocar(player, gravacaoId, rotulo, { avisar = true } = {}) {
+  corrigirDuracao(player);
   player.src = `/api/admin/gravacoes/${gravacaoId}/audio`;
   player.hidden = false;
-  player.play().catch(() => {});
-  aviso(`Tocando: ${rotulo}`);
+  player.play().catch(() => aviso('Não foi possível tocar este áudio neste navegador. Use "Baixar" e abra no seu player.', true));
+  if (avisar) aviso(`Tocando: ${rotulo}`);
 }
 
 function filtrarNotas(lista) {
@@ -339,20 +362,54 @@ function exportarRanking() {
 
 /* ================================ ÁUDIOS ================================ */
 
+const ZIP_LIMITE_BYTES = 400 * 1024 * 1024; // o ZIP é montado na memória do navegador
+const statusDe = (g) => (g.status !== 'completo' ? 'gravando' : g.aprovada ? 'aprovado' : 'completo');
+
 async function carregarGravacoes() {
-  const lista = await api('GET', `/api/admin/eventos/${estado.eventoId}/gravacoes`);
-  const completas = lista.filter((g) => g.status === 'completo').length;
-  const aprovadas = lista.filter((g) => g.aprovada).length;
+  estado.gravacoes = await api('GET', `/api/admin/eventos/${estado.eventoId}/gravacoes`);
+  const lista = estado.gravacoes;
   $('c-gravacoes').textContent = lista.length;
-  $('resumo-gravacoes').textContent = `${lista.length} áudios · ${completas} completos · ${aprovadas} aprovados`;
+  $('resumo-gravacoes').textContent =
+    `${lista.length} áudios · ${lista.filter((g) => g.status === 'completo').length} completos · ${lista.filter((g) => g.aprovada).length} aprovados`;
+  // filtro de jurado: só quem já gravou
+  const sel = $('filtro-jurado-audios');
+  const atual = sel.value;
+  const jurados = [...new Map(lista.map((g) => [g.jurado, g.jurado_ordem])).entries()].sort((a, b) => (a[1] ?? 99) - (b[1] ?? 99));
+  sel.replaceChildren(el('option', { value: '*', textContent: 'Todos os jurados' }), ...jurados.map(([nome, ordem]) => el('option', { value: nome, textContent: ordem ? `J${ordem} · ${nome}` : nome })));
+  sel.value = jurados.some(([n]) => n === atual) ? atual : '*';
+  renderizarGravacoes();
+}
+
+function gravacoesFiltradas() {
+  const q = $('busca-audios').value.trim().toLowerCase();
+  const jur = $('filtro-jurado-audios').value;
+  const st = $('filtro-status-audios').value;
+  return estado.gravacoes.filter((g) => {
+    if (jur !== '*' && g.jurado !== jur) return false;
+    if (st !== '*' && statusDe(g) !== st) return false;
+    return !q || `${num(g.numero)} ${g.coreografia} ${g.grupo || ''}`.toLowerCase().includes(q);
+  });
+}
+
+function renderizarGravacoes() {
+  const lista = gravacoesFiltradas();
+  const player = $('player');
+  const completos = lista.filter((g) => g.status === 'completo');
+  const bytes = completos.reduce((s, g) => s + (g.tamanho || 0), 0);
+  if (!estado.baixando) {
+    $('btn-zip-texto').textContent = completos.length ? `Baixar ZIP (${completos.length} · ${fmtBytes(bytes)})` : 'Baixar ZIP';
+    $('btn-zip').disabled = !completos.length;
+  }
   $('tb-gravacoes').replaceChildren(
     ...(lista.length
       ? lista.map((g) => {
-          const status = g.status === 'completo'
-            ? selo(g.aprovada ? 'aprovada' : 'completo', g.aprovada ? 'Aprovado' : 'Completo')
-            : selo('gravando', `Chegando · ${g.trechos} trechos`);
+          const st = statusDe(g);
+          const status = st === 'gravando'
+            ? selo('gravando', `Chegando · ${g.trechos} trechos`)
+            : selo(st === 'aprovado' ? 'aprovada' : 'completo', st === 'aprovado' ? 'Aprovado' : 'Completo');
           const urlAudio = `/api/admin/gravacoes/${g.id}/audio`;
-          return el('tr', {},
+          const tocandoEste = estado.tocando === g.id && !player.paused;
+          return el('tr', { class: estado.tocando === g.id ? 'tocando' : '', dataset: { id: g.id } },
             el('td', {}, el('span', { class: 'num', textContent: num(g.numero) })),
             el('td', {},
               el('div', { textContent: `${g.coreografia}${g.versao > 1 ? ` (v${g.versao})` : ''}` }),
@@ -364,21 +421,75 @@ async function carregarGravacoes() {
             el('td', {}, status),
             el('td', { textContent: g.duracao_ms ? fmtDuracao(g.duracao_ms) : '—' }),
             el('td', { class: 'acoes' },
-              botao('Ouvir', 'play-circle-outline', () => tocar($('player'), g.id, g.identificador)),
-              el('a', { class: 'btn btn-sec', href: `${urlAudio}?download=1`, download: '' }, icone('download'), ' Baixar'),
+              botao(tocandoEste ? 'Pausar' : 'Ouvir', tocandoEste ? 'pause-circle-outline' : 'play-circle-outline', () => alternarAudio(g), tocandoEste ? 'btn btn-hot' : 'btn btn-sec'),
+              el('a', { class: 'btn btn-sec', href: `${urlAudio}?download=1`, download: '', title: st === 'gravando' ? 'Baixa o que já chegou (parcial)' : 'Baixar o arquivo' },
+                icone('download'), st === 'gravando' ? ' Baixar parcial' : ' Baixar'),
               g.status === 'completo'
                 ? botao(g.aprovada ? 'Retirar aprovação' : 'Aprovar', g.aprovada ? 'close-circle-outline' : 'check-decagram', () => aprovar(g, !g.aprovada), g.aprovada ? 'btn btn-sec' : 'btn btn-hot')
                 : null,
             ),
           );
         })
-      : [vazio(7, 'Nenhum áudio ainda.')]),
+      : [vazio(7, estado.gravacoes.length ? 'Nenhum áudio com esse filtro.' : 'Nenhum áudio ainda.')]),
   );
+}
+
+function alternarAudio(g) {
+  const player = $('player');
+  if (estado.tocando === g.id) {
+    if (player.paused) player.play().catch(() => {});
+    else player.pause();
+    return;
+  }
+  estado.tocando = g.id;
+  $('player-titulo').textContent = `${num(g.numero)} · ${g.coreografia} — ${g.jurado}${g.status !== 'completo' ? ' (parcial)' : ''}`;
+  $('barra-player').hidden = false;
+  tocar(player, g.id, g.identificador, { avisar: false }); // o título já aparece na barra do player
 }
 
 async function aprovar(g, aprovada) {
   await api('POST', `/api/admin/gravacoes/${g.id}/aprovar`, { json: { aprovada } });
   await Promise.all([carregarGravacoes(), carregarQuadro()]);
+}
+
+const fmtBytes = (b) => (b >= 1048576 ? `${(b / 1048576).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
+const pastaDe = (g) => `${num(g.numero)}_${g.coreografia}`.normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 60);
+
+/** Baixa os áudios completos da lista filtrada, um por um, e monta um ZIP (pastas por coreografia). */
+async function baixarZip() {
+  if (estado.baixando) return;
+  const lista = gravacoesFiltradas().filter((g) => g.status === 'completo');
+  const total = lista.reduce((s, g) => s + (g.tamanho || 0), 0);
+  if (!lista.length) return aviso('Nenhum áudio completo na lista filtrada.', true);
+  if (total > ZIP_LIMITE_BYTES) {
+    return aviso(`São ${fmtBytes(total)} de áudio: acima de ${fmtBytes(ZIP_LIMITE_BYTES)}, o navegador pode travar. Filtre por jurado ou coreografia e baixe em partes.`, true);
+  }
+  estado.baixando = true;
+  $('btn-zip').disabled = true;
+  try {
+    const arquivos = [];
+    for (const [i, g] of lista.entries()) {
+      $('btn-zip-texto').textContent = `Baixando ${i + 1}/${lista.length}…`;
+      const r = await fetch(`/api/admin/gravacoes/${g.id}/audio?download=1`, { credentials: 'same-origin', cache: 'no-store' });
+      if (!r.ok) throw new Error(`Falha ao baixar ${g.identificador} (erro ${r.status})`);
+      arquivos.push({ nome: `${pastaDe(g)}/${g.identificador}`, bytes: new Uint8Array(await r.arrayBuffer()), data: new Date(g.finalizado_em || g.iniciado_em) });
+    }
+    $('btn-zip-texto').textContent = 'Montando o ZIP…';
+    const zip = montarZip(arquivos);
+    const ev = estado.detalhe.evento;
+    const filtro = [$('filtro-jurado-audios').value, $('filtro-status-audios').value].filter((v) => v !== '*').join('_');
+    const nome = `audios_${ev.data}_${ev.nome}${filtro ? `_${filtro}` : ''}.zip`.normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^A-Za-z0-9._-]+/g, '-').toLowerCase();
+    const url = URL.createObjectURL(zip);
+    const a = el('a', { href: url, download: nome });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    aviso(`ZIP pronto: ${lista.length} áudio(s), ${fmtBytes(zip.size)}.`);
+  } finally {
+    estado.baixando = false;
+    renderizarGravacoes();
+  }
 }
 
 /* ================================ COREOGRAFIAS ================================ */
@@ -600,6 +711,12 @@ async function iniciar() {
   $('busca-notas').addEventListener('input', renderizarNotas);
   $('filtro-categoria').addEventListener('change', renderizarRanking);
   $('btn-exportar-ranking').addEventListener('click', exportarRanking);
+  $('busca-audios').addEventListener('input', renderizarGravacoes);
+  $('filtro-jurado-audios').addEventListener('change', renderizarGravacoes);
+  $('filtro-status-audios').addEventListener('change', renderizarGravacoes);
+  $('btn-zip').addEventListener('click', () => tentar(baixarZip));
+  // o botão da linha acompanha o player (tocar/pausar/terminar)
+  for (const ev of ['play', 'pause', 'ended']) $('player').addEventListener(ev, () => { if (estado.aba === 'gravacoes') renderizarGravacoes(); });
   $('form-coreografia').addEventListener('submit', (e) => tentar(() => salvarCoreografia(e)));
   $('btn-importar').addEventListener('click', () => tentar(importarCsv));
   $('form-escala').addEventListener('submit', (e) => tentar(() => escalar(e)));

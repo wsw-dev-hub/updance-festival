@@ -164,9 +164,17 @@ async function carregarGrupos({ silencioso = false } = {}) {
     ...(estado.grupos.length
       ? estado.grupos.map((g) =>
           el('tr', {},
-            el('td', { textContent: g.nome }),
-            el('td', { textContent: g.cidade || '—' }),
-            el('td', { textContent: g.responsavel || '—' }),
+            el('td', {},
+              el('strong', { textContent: g.nome }),
+              el('div', { class: 'muted', textContent: [g.cidade, g.responsavel && `Resp.: ${g.responsavel}`].filter(Boolean).join(' · ') }),
+            ),
+            el('td', { class: 'equipe' },
+              linhaEquipe('Coreógrafo(a)/prof.', g.coreografo),
+              linhaEquipe('Direção', g.diretores),
+              linhaEquipe('Coordenação', g.coordenadores),
+              !g.coreografo && !g.diretores && !g.coordenadores ? el('span', { class: 'muted', textContent: '—' }) : null,
+            ),
+            el('td', {}, listaIntegrantes(g.integrantes)),
             el('td', {}, el('div', { class: 'ident', textContent: g.email || '' }), el('div', { textContent: g.telefone || '' })),
             el('td', { textContent: g.coreografias }),
             el('td', { class: 'acoes' },
@@ -179,9 +187,26 @@ async function carregarGrupos({ silencioso = false } = {}) {
   );
 }
 
+const CAMPOS_GRUPO = ['nome', 'cidade', 'responsavel', 'email', 'telefone', 'integrantes', 'coreografo', 'diretores', 'coordenadores'];
+const nomesDe = (texto) => (texto ? texto.split('\n').filter(Boolean) : []);
+
+function linhaEquipe(rotulo, texto) {
+  const nomes = nomesDe(texto);
+  return nomes.length ? el('div', {}, el('span', { class: 'rotulo-equipe', textContent: `${rotulo}: ` }), nomes.join(', ')) : null;
+}
+
+function listaIntegrantes(texto) {
+  const nomes = nomesDe(texto);
+  if (!nomes.length) return el('span', { class: 'muted', textContent: '—' });
+  return el('details', { class: 'integrantes' },
+    el('summary', { textContent: `${nomes.length} integrante${nomes.length > 1 ? 's' : ''}` }),
+    el('ol', {}, ...nomes.map((n) => el('li', { textContent: n }))),
+  );
+}
+
 function editarGrupo(g) {
   const f = $('form-grupo');
-  for (const k of ['id', 'nome', 'cidade', 'responsavel', 'email', 'telefone']) f[k].value = g[k] || '';
+  for (const k of ['id', ...CAMPOS_GRUPO]) f[k].value = g[k] || '';
   $('btn-salvar-grupo').replaceChildren(icone('content-save-outline'), ' Salvar alterações');
   $('btn-cancelar-grupo').hidden = false;
   f.nome.focus();
@@ -198,7 +223,7 @@ async function salvarGrupo(e) {
   e.preventDefault();
   const f = new FormData(e.target);
   const id = f.get('id');
-  const dados = Object.fromEntries(['nome', 'cidade', 'responsavel', 'email', 'telefone'].map((k) => [k, f.get(k)]));
+  const dados = Object.fromEntries(CAMPOS_GRUPO.map((k) => [k, f.get(k)]));
   if (id) await api('PATCH', `/api/admin/grupos/${id}`, { json: dados });
   else await api('POST', '/api/admin/grupos', { json: dados });
   aviso(`Grupo "${dados.nome}" ${id ? 'atualizado' : 'cadastrado'}.`);

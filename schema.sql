@@ -59,7 +59,11 @@ CREATE TABLE IF NOT EXISTS grupos (
   responsavel  TEXT,
   email        TEXT,
   telefone     TEXT,
-  criado_em    INTEGER NOT NULL
+  criado_em    INTEGER NOT NULL,
+  integrantes    TEXT,
+  coreografo     TEXT,
+  diretores      TEXT,
+  coordenadores  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS eventos (
