@@ -148,14 +148,15 @@
       <label class="filtro-rotulado">Formação <select id="filtro-formacao-ranking"></select></label>
       <label class="filtro-rotulado">Faixa <select id="filtro-faixa"></select></label>
       <label class="filtro-rotulado">Categoria <select id="filtro-categoria"></select></label>
+      <button id="btn-limpar-filtros-ranking" class="btn btn-sec" type="button" hidden><i class="mdi mdi-filter-remove-outline"></i> Limpar filtros</button>
       <span id="resumo-ranking" class="muted"></span>
     </div>
-    <div id="podio" class="podios" aria-label="Três maiores médias de cada formação"></div>
+    <div id="podio" class="podios" aria-label="Três maiores médias dos filtros selecionados"></div>
     <div class="tabela-rolagem"><table>
       <thead><tr><th>Posição</th><th>Nº</th><th>Coreografia</th><th>Grupo</th><th>Formação</th><th>Faixa</th><th>Categoria</th><th>Média</th><th>Notas</th></tr></thead>
       <tbody id="tb-ranking"></tbody>
     </table></div>
-    <p class="muted">A posição é sempre calculada dentro da formação (e dos filtros de faixa e categoria escolhidos). Empates na média dividem a mesma posição. "Parcial" = ainda faltam notas de jurados ativos.</p>
+    <p class="muted">Sem filtros, o pódio e a tabela mostram o <strong>ranking geral</strong> (todas as coreografias juntas). Com filtros de formação, faixa ou categoria, a posição é recalculada só entre as coreografias selecionadas. Empates na média dividem a mesma posição. "Parcial" = ainda faltam notas de jurados ativos.</p>
   </section>
 
   <!-- ============================ ÁUDIOS ============================ -->

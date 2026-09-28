@@ -14,7 +14,7 @@ Projeto único:
 | `/` | jurados | Gravação do comentário em áudio **e nota da coreografia** (funciona sem internet: a nota fica guardada e é enviada quando a rede volta) |
 | `/admin/` | organização (nível **geral**) | **Painel de controle** do sistema: números gerais (eventos, responsáveis, jurados, grupos, notas, áudios, armazenamento, logins falhos), alertas (evento sem responsável, contas bloqueadas, grupos sem evento), tabela de todos os eventos, administradores, contas de jurados (nova senha, desativar), grupos de todos os eventos (consulta), auditoria geral. **Não cadastra** eventos, grupos nem jurados. |
 | `/admin/eventos/` | geral e **responsáveis** | **Eventos e responsáveis**: cria eventos (já com os responsáveis) e, em cada cartão, adiciona, remove e gera nova senha para os responsáveis. |
-| `/admin/evento/?id=…` | geral e **responsáveis do evento** | Tela de cada evento: **Notas** (jurado × coreografia, status dos áudios, média automática), **Ranking** (pódio das 3 maiores médias + lista completa, por solos, duos, trios e grupos), Áudios, Coreografias, **Grupos** (cadastro com equipe), **Jurados** (cadastro e escala), Auditoria. |
+| `/admin/evento/?id=…` | geral e **responsáveis do evento** | Tela de cada evento: **Notas** (jurado × coreografia, status dos áudios, média automática), **Ranking** (ranking geral por padrão; pódio das 3 maiores médias e lista completa, recalculados pelos filtros de formação, faixa e categoria), Áudios, Coreografias, **Grupos** (cadastro com equipe), **Jurados** (cadastro e escala), Auditoria. |
 
 **Níveis de administrador:**
 - **Geral:** a organização do festival. Usa o painel de controle, vê todos os eventos e pode agir em qualquer um.
@@ -33,8 +33,10 @@ Projeto único:
 - A escala é definida por evento: mínima, máxima e casas decimais. O padrão é **0 a 10, uma casa**.
 - O jurado pode alterar a nota enquanto o evento aceita envios, e cada alteração fica na auditoria com o valor anterior.
 - A **média** é a média simples das notas dos jurados **ativos** na escala. Um jurado suspenso continua aparecendo no quadro, mas sai da média.
-- No **ranking**, a posição é sempre calculada **dentro da formação** (solo, duo, trio, grupo) e dos filtros de faixa e categoria escolhidos. Médias iguais dividem a posição. "Parcial" indica que ainda faltam notas.
-- **Filtros do pódio:** Formação (abas ou seletor), Faixa e Categoria. O título de cada pódio mostra os filtros aplicados (ex.: "Pódio · Solos · Adulto"). Em **Todas as formações**, aparece um pódio para cada formação, cada um com a sua própria classificação — nunca um pódio único misturando solos, duos, trios e grupos. O CSV exportado segue os mesmos filtros e traz a coluna `posicao_na_formacao`.
+- **Ranking e pódio a partir dos filtros:** Formação (abas ou seletor), Faixa e Categoria.
+  - **Sem nenhum filtro** (padrão ao abrir): **ranking geral**, com todas as coreografias juntas, sem segmentar. O pódio mostra as 3 maiores médias do evento.
+  - **Com filtros:** pódio, posições e tabela são recalculados só entre as coreografias selecionadas (ex.: "Pódio · Solos · Adulto"). O botão **Limpar filtros** volta ao ranking geral.
+  - Médias iguais dividem a posição. "Parcial" indica que ainda faltam notas. O CSV exportado segue os filtros (ex.: `ranking_<data>_geral.csv`, `ranking_<data>_solos_adulto.csv`).
 
 **Grupos:** além de nome, cidade, responsável e contato, o cadastro guarda a equipe:
 - **integrantes**;
