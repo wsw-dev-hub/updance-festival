@@ -29,6 +29,8 @@ Projeto único:
 
 **Grupos por evento:** cada grupo/escola pertence a um evento. O mesmo nome pode existir em eventos diferentes (com contatos e equipes próprios), e um responsável nunca vê os grupos de outro evento.
 
+**Pausar a gravação** (app do jurado): **Pausar** interrompe a captura e **Retomar** continua na mesma gravação. O trecho em pausa não é gravado: o arquivo final tem só o tempo falado, o que evita silêncios longos e reduz o tamanho. O cronômetro e o limite de duração do evento contam apenas o tempo gravado. Pausar também salva no aparelho o trecho já gravado, para ele ser enviado.
+
 **Notas e médias:**
 - A escala é definida por evento: mínima, máxima e casas decimais. O padrão é **0 a 10, uma casa**.
 - O jurado pode alterar a nota enquanto o evento aceita envios, e cada alteração fica na auditoria com o valor anterior.

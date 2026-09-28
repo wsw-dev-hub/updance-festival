@@ -4,7 +4,7 @@
 // Os arquivos gerados pelo Vite têm hash no nome (/assets/app-3f9c1a.js). Na instalação,
 // o SW lê o index.html publicado e guarda todos os /assets/* que ele referencia; assim
 // o app abre offline já na primeira visita depois da instalação.
-const VERSAO = 'udx-festival-v10';
+const VERSAO = 'udx-festival-v11';
 const FIXOS = [
   '/',
   '/manifest.webmanifest',

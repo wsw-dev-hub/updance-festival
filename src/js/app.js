@@ -611,7 +611,9 @@ async function gravar() {
   estado.avisoFinal = false;
 
   vibrar(60);
+  if (!estado.offline) esconderAlerta(); // aviso da coreografia anterior não empurra os controles para fora da tela
   aplicarEstadoVisual();
+  $('btn-encerrar').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); // Pausar/Encerrar sempre à vista no celular
   iniciarTimerTela();
   sinc.agendar(0);
 }
