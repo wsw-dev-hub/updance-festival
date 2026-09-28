@@ -258,10 +258,25 @@ function filtrarNotas(lista) {
   });
 }
 
+/** Cadeado: o jurado finalizou a avaliação desta coreografia. Clicar reabre (com confirmação). */
+function cadeadoFinalizada(c, j) {
+  const quando = fmtHora(c.finalizadas[j.id]);
+  return el('button', {
+    class: 'flag f-finalizada', type: 'button', textContent: '🔒',
+    title: `${j.nome} finalizou em ${quando} — clique para reabrir`, ariaLabel: `Reabrir avaliação de ${j.nome}`,
+    onclick: () => tentar(async () => {
+      if (!confirm(`${j.nome} finalizou a avaliação de ${num(c.numero)} · ${c.nome} em ${quando}.\n\nReabrir? O jurado poderá alterar a nota e gravar de novo, e precisará finalizar outra vez.`)) return;
+      await api('DELETE', `/api/admin/eventos/${estado.eventoId}/finalizacoes/${c.id}/${j.id}`);
+      aviso(`Avaliação de ${j.nome} na ${num(c.numero)} reaberta.`);
+      await carregarQuadro();
+    }),
+  });
+}
+
 function renderizarNotas() {
   const { jurados, coreografias, resumo } = estado.quadro;
   const pct = resumo.notas_esperadas ? Math.round((resumo.notas_lancadas / resumo.notas_esperadas) * 100) : 0;
-  $('resumo-notas').textContent = `${resumo.notas_lancadas} de ${resumo.notas_esperadas} notas (${pct}%) · atualizado ${fmtHora(estado.quadro.gerado_em)}`;
+  $('resumo-notas').textContent = `${resumo.notas_lancadas} de ${resumo.notas_esperadas} notas (${pct}%) · ${resumo.finalizadas ?? 0} finalizada(s) · atualizado ${fmtHora(estado.quadro.gerado_em)}`;
   $('th-notas').replaceChildren(
     el('tr', {},
       el('th', { class: 'col-fixa', textContent: 'Nº' }),
@@ -293,6 +308,7 @@ function renderizarNotas() {
               el('td', { class: `celula-nota${j.ativo ? '' : ' suspenso'}` },
                 el('span', { class: `nota-valor${c.notas[j.id] == null ? ' sem' : ''}`, textContent: fmtNota(c.notas[j.id], casas()) }),
                 flagAudio(c.audios[j.id], j, c),
+                c.finalizadas?.[j.id] ? cadeadoFinalizada(c, j) : null,
               ),
             ),
             el('td', { class: 'col-media' },

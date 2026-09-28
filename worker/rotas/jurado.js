@@ -38,6 +38,14 @@ async function juradoNoEvento(env, conta, eventoId) {
   return ej ? { id: conta.id, nome: conta.nome, ordem: ej.ordem } : null;
 }
 
+/** Depois de finalizar, o jurado não altera mais a avaliação daquela coreografia (a organização pode reabrir). */
+async function exigirNaoFinalizada(env, coreografiaId, juradoId) {
+  const f = await env.DB.prepare('SELECT finalizado_em FROM finalizacoes WHERE coreografia_id = ?1 AND jurado_id = ?2')
+    .bind(coreografiaId, juradoId)
+    .first();
+  if (f) throw new ErroHttp(409, 'Avaliação desta coreografia já foi finalizada. Para alterar, fale com a organização.', 'avaliacao_finalizada');
+}
+
 /* GET /api/sessao?evento=<id>
    Eventos (ainda não encerrados) em que o jurado está escalado; dados do evento escolhido. */
 export async function sessao(request, env) {
@@ -64,7 +72,7 @@ export async function sessao(request, env) {
   };
   if (!sel) return json({ ...base, evento: null });
 
-  const [coreografias, gravacoes, notas] = await env.DB.batch([
+  const [coreografias, gravacoes, notas, finalizadas] = await env.DB.batch([
     env.DB.prepare(
       `SELECT c.id, c.numero, c.nome, g.nome AS grupo, c.categoria, c.formacao, c.faixa
          FROM coreografias c LEFT JOIN grupos g ON g.id = c.grupo_id
@@ -72,6 +80,7 @@ export async function sessao(request, env) {
     ).bind(sel.id),
     env.DB.prepare('SELECT id, coreografia_id, versao, status FROM gravacoes WHERE jurado_id = ?1 AND evento_id = ?2 ORDER BY criado_em').bind(m.id, sel.id),
     env.DB.prepare('SELECT coreografia_id, nota, atualizado_em FROM notas WHERE jurado_id = ?1 AND evento_id = ?2').bind(m.id, sel.id),
+    env.DB.prepare('SELECT coreografia_id, finalizado_em FROM finalizacoes WHERE jurado_id = ?1 AND evento_id = ?2').bind(m.id, sel.id),
   ]);
   return json({
     ...base,
@@ -80,6 +89,7 @@ export async function sessao(request, env) {
     coreografias: coreografias.results,
     gravacoes: gravacoes.results,
     notas: Object.fromEntries(notas.results.map((n) => [n.coreografia_id, n.nota])),
+    finalizadas: Object.fromEntries(finalizadas.results.map((f) => [f.coreografia_id, f.finalizado_em])),
   });
 }
 
@@ -110,6 +120,8 @@ export async function salvarNota(request, env, { coreografia }) {
   if (agora < evento.abre_em) throw new ErroHttp(403, 'O evento ainda não foi aberto para avaliação', 'evento_nao_aberto');
   if (!dentroDaJanelaDeEnvio(evento)) throw new ErroHttp(403, 'Prazo de avaliação encerrado', 'prazo_encerrado');
 
+  await exigirNaoFinalizada(env, c.id, m.id);
+
   const { nota } = await lerJson(request, 1024);
   const anterior = await env.DB.prepare('SELECT nota FROM notas WHERE coreografia_id = ?1 AND jurado_id = ?2').bind(c.id, m.id).first();
   if (nota === null || nota === '') {
@@ -130,6 +142,39 @@ export async function salvarNota(request, env, { coreografia }) {
     detalhes: { numero: c.numero, nota: valor, ...(anterior ? { anterior: anterior.nota } : {}) },
   });
   return json({ ok: true, nota: valor });
+}
+
+/* POST /api/finalizar/:coreografia
+   Conclui a avaliação do jurado nessa coreografia: exige a nota registrada e nenhum áudio ainda chegando.
+   Depois disso, nota e gravações dessa coreografia ficam bloqueadas para ele. */
+export async function finalizarAvaliacao(request, env, { coreografia }) {
+  const m = await exigirJurado(request, env);
+  const c = await env.DB.prepare('SELECT id, evento_id, numero, nome FROM coreografias WHERE id = ?1').bind(coreografia).first();
+  if (!c) throw new ErroHttp(404, 'Coreografia não encontrada', 'nao_encontrada');
+  const evento = await carregarEvento(env, c.evento_id);
+  if (!(await juradoNoEvento(env, m, evento.id))) throw new ErroHttp(403, 'Você não é jurado deste evento', 'nao_jurado');
+  if (Date.now() < evento.abre_em) throw new ErroHttp(403, 'O evento ainda não foi aberto para avaliação', 'evento_nao_aberto');
+
+  const ja = await env.DB.prepare('SELECT finalizado_em FROM finalizacoes WHERE coreografia_id = ?1 AND jurado_id = ?2').bind(c.id, m.id).first();
+  if (ja) return json({ ok: true, finalizado_em: ja.finalizado_em }); // idempotente
+
+  const [nota, chegando, audios] = await env.DB.batch([
+    env.DB.prepare('SELECT nota FROM notas WHERE coreografia_id = ?1 AND jurado_id = ?2').bind(c.id, m.id),
+    env.DB.prepare("SELECT COUNT(*) AS n FROM gravacoes WHERE coreografia_id = ?1 AND jurado_id = ?2 AND status <> 'completo'").bind(c.id, m.id),
+    env.DB.prepare("SELECT COUNT(*) AS n FROM gravacoes WHERE coreografia_id = ?1 AND jurado_id = ?2 AND status = 'completo'").bind(c.id, m.id),
+  ]);
+  if (!nota.results.length) throw new ErroHttp(422, 'Registre a nota antes de finalizar', 'sem_nota');
+  if (chegando.results[0].n) throw new ErroHttp(409, 'Ainda há áudio sendo enviado. Aguarde o "✓ enviado" e finalize de novo.', 'audio_em_envio');
+
+  const agora = Date.now();
+  await env.DB.prepare('INSERT OR IGNORE INTO finalizacoes (coreografia_id, jurado_id, evento_id, finalizado_em) VALUES (?1, ?2, ?3, ?4)')
+    .bind(c.id, m.id, evento.id, agora)
+    .run();
+  await auditar(env, request, {
+    eventoId: evento.id, ator: ator(m), acao: 'avaliacao_finalizada', alvo: c.id,
+    detalhes: { numero: c.numero, nota: nota.results[0].nota, audios: audios.results[0].n },
+  });
+  return json({ ok: true, finalizado_em: agora });
 }
 
 /** Gravação do próprio jurado, com a escala no evento ativa. 404 quando é de outra pessoa: não revela que existe. */
@@ -173,6 +218,8 @@ export async function criarGravacao(request, env, { id }) {
   const agora = Date.now();
   if (agora < evento.abre_em) throw new ErroHttp(403, 'O evento ainda não foi aberto para gravação', 'evento_nao_aberto');
   if (!dentroDaJanelaDeEnvio(evento)) throw new ErroHttp(403, 'Prazo de envio encerrado', 'prazo_encerrado');
+
+  await exigirNaoFinalizada(env, coreografia.id, jurado.id);
 
   const mime = mimeBase(corpo.mime);
   if (!mime) throw new ErroHttp(422, 'Formato de áudio não permitido', 'formato_invalido');

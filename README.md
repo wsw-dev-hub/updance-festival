@@ -29,6 +29,15 @@ Projeto único:
 
 **Grupos por evento:** cada grupo/escola pertence a um evento. O mesmo nome pode existir em eventos diferentes (com contatos e equipes próprios), e um responsável nunca vê os grupos de outro evento.
 
+**Finalizar avaliação** (app do jurado): enquanto não finaliza, o jurado grava quantos comentários quiser e altera a nota quantas vezes precisar. Ao tocar em **Finalizar avaliação** (e confirmar), a avaliação daquela coreografia é concluída:
+- ela continua na lista, com 🔒 e "finalizada", mas não pode mais ser aberta; o app vai para a próxima;
+- o servidor recusa nova nota, remoção da nota e nova gravação dessa coreografia para esse jurado;
+- só libera o botão com a **nota registrada** e **nenhum áudio dessa coreografia ainda sendo enviado**, e precisa de internet;
+- quando todas estão finalizadas, o app mostra "Todas as avaliações foram finalizadas";
+- depois de gravar, o app fica na mesma coreografia (para gravar outro comentário, ajustar a nota ou finalizar).
+
+Na aba **Notas** da tela do evento, cada avaliação finalizada aparece com 🔒. Se o jurado finalizou por engano, a organização (geral ou responsável do evento) clica no cadeado para **reabrir**. Finalizar e reabrir ficam na auditoria.
+
 **Pausar a gravação** (app do jurado): **Pausar** interrompe a captura e **Retomar** continua na mesma gravação. O trecho em pausa não é gravado: o arquivo final tem só o tempo falado, o que evita silêncios longos e reduz o tamanho. O cronômetro e o limite de duração do evento contam apenas o tempo gravado. Pausar também salva no aparelho o trecho já gravado, para ele ser enviado.
 
 **Notas e médias:**
@@ -132,7 +141,7 @@ npx wrangler d1 execute updance-festival_db --remote --file=schema.sql
 SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name;
 ```
 
-O resultado deve ter **12 tabelas**: `admins, auditoria, coreografias, evento_jurados, evento_responsaveis, eventos, gravacoes, grupos, jurados, links_entrega, notas, trechos`.
+O resultado deve ter **13 tabelas**: `admins, auditoria, coreografias, evento_jurados, evento_responsaveis, eventos, finalizacoes, gravacoes, grupos, jurados, links_entrega, notas, trechos`.
 
 > **Já executou o `schema.sql` da versão anterior (10 tabelas)?** Execute **uma vez** o `atualizacao-notas-ranking.sql`, no Console ou pelo terminal:
 >
@@ -150,8 +159,9 @@ O resultado deve ter **12 tabelas**: `admins, auditoria, coreografias, evento_ju
 > 1. **`atualizacao-grupos-equipe.sql`**: acrescenta ao `grupos` as colunas `integrantes`, `coreografo`, `diretores` e `coordenadores`.
 > 2. **`atualizacao-grupos-por-evento.sql`**: liga cada grupo ao seu evento (coluna `evento_id`). Grupo usado em mais de um evento ganha uma cópia por evento, com a mesma equipe; grupo sem coreografia fica "sem evento" (aparece no painel de controle para excluir). Nenhuma coreografia, nota ou áudio é apagado. A consulta do fim mostra quantos grupos ficaram em cada evento.
 > 3. **`atualizacao-faixa-coreografias.sql`**: acrescenta a coluna `faixa` às coreografias (as existentes ficam "sem faixa" até alguém definir).
+> 4. **`atualizacao-finalizacao.sql`**: cria a tabela `finalizacoes` (botão "Finalizar avaliação" do jurado).
 >
-> Resumo da ordem para um banco antigo: `atualizacao-notas-ranking.sql` → `atualizacao-grupos-equipe.sql` → `atualizacao-grupos-por-evento.sql` → `atualizacao-faixa-coreografias.sql`. Pule os que já executou. Banco criado com o `schema.sql` desta versão já tem tudo e não precisa de nenhum arquivo de atualização.
+> Resumo da ordem para um banco antigo: `atualizacao-notas-ranking.sql` → `atualizacao-grupos-equipe.sql` → `atualizacao-grupos-por-evento.sql` → `atualizacao-faixa-coreografias.sql` → `atualizacao-finalizacao.sql`. Pule os que já executou. Banco criado com o `schema.sql` desta versão já tem tudo e não precisa de nenhum arquivo de atualização.
 
 > **Se o banco já tinha tabelas de uma versão anterior deste projeto,** confira com a consulta abaixo:
 >
@@ -234,6 +244,7 @@ Não cadastre variáveis de texto (**Text**) pelo painel. As variáveis do `[var
 | `POST /api/member/reset` `{token, password}` | jurado | Grava a nova senha e derruba as sessões abertas |
 | `POST /api/member/senha` `{atual, nova}` | jurado | Troca a própria senha (obrigatória no 1º acesso) |
 | `PUT /api/notas/:coreografia` `{nota}` | jurado | Lança ou altera a nota (`null` apaga) |
+| `POST /api/finalizar/:coreografia` | jurado | Finaliza a avaliação da coreografia (exige nota e áudios enviados); depois disso nota e gravações dessa coreografia são recusadas |
 | `GET /api/me` | jurado | Jurado logado, ou 401 |
 | `POST /api/admin/setup` `{setup_key, email, password, nome}` | organização | Cria ou redefine um admin com a `ADMIN_SETUP_KEY` |
 | `POST /api/admin/login` `{email, password}` | admin | Cria a sessão (cookie `a_session`, 12 h) |
@@ -290,5 +301,6 @@ atualizacao-notas-ranking.sql   bancos criados antes das notas/ranking (executar
 atualizacao-grupos-equipe.sql   bancos criados antes da equipe dos grupos (executar 2º)
 atualizacao-grupos-por-evento.sql   bancos criados antes dos grupos por evento (executar 3º)
 atualizacao-faixa-coreografias.sql  bancos criados antes da faixa das coreografias (executar 4º)
+atualizacao-finalizacao.sql         bancos criados antes do botão Finalizar (executar 5º)
 vite.config.js · wrangler.toml · package.json
 ```

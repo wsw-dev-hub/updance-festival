@@ -71,6 +71,10 @@ export const sair = () => chamar('POST', '/api/member/logout', { tempoLimite: 80
 export const salvarNota = (coreografiaId, nota) =>
   chamar('PUT', `/api/notas/${encodeURIComponent(coreografiaId)}`, { json: { nota }, tempoLimite: 15_000 });
 
+/** Conclui a avaliação da coreografia (nota + áudios): depois disso o jurado não altera mais. */
+export const finalizarAvaliacao = (coreografiaId) =>
+  chamar('POST', `/api/finalizar/${encodeURIComponent(coreografiaId)}`, { json: {}, tempoLimite: 15_000 });
+
 export const registrarGravacao = (g) =>
   chamar('PUT', `/api/gravacoes/${g.id}`, { json: { coreografia_id: g.coreografia_id, mime: g.mime, iniciado_em: g.iniciado_em } });
 

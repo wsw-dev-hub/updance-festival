@@ -182,6 +182,7 @@ button.flag:focus-visible { outline: none; box-shadow: 0 0 0 .18rem rgba(250, 51
 .f-gravando { color: var(--udx-primary-orange); background: color-mix(in srgb, var(--udx-primary-orange) 16%, transparent); }
 .f-completo { color: var(--udx-ok); background: color-mix(in srgb, var(--udx-ok) 16%, transparent); }
 .f-aprovado { color: #fff; background: var(--udx-grad-crimson); }
+.f-finalizada { background: color-mix(in srgb, var(--udx-cyan) 16%, transparent); border-color: var(--udx-cyan); font-size: 11px; }
 
 /* Quadro de notas: nº e coreografia fixos ao rolar para o lado */
 .tabela-notas th, .tabela-notas td { vertical-align: middle; }

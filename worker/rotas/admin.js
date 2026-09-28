@@ -784,7 +784,7 @@ export async function excluirCoreografia(request, env, { id }) {
 export async function quadroNotas(request, env, { id }) {
   await exigirEvento(request, env, id);
   const evento = await eventoOu404(env, id);
-  const [jur, cor, not, gra] = await env.DB.batch([
+  const [jur, cor, not, gra, fin] = await env.DB.batch([
     env.DB.prepare(
       `SELECT j.id, j.nome, ej.ordem, ej.ativo FROM evento_jurados ej JOIN jurados j ON j.id = ej.jurado_id
         WHERE ej.evento_id = ?1 ORDER BY ej.ordem`,
@@ -802,7 +802,12 @@ export async function quadroNotas(request, env, { id }) {
         WHERE g.evento_id = ?1
           AND g.versao = (SELECT MAX(v.versao) FROM gravacoes v WHERE v.coreografia_id = g.coreografia_id AND v.jurado_id = g.jurado_id)`,
     ).bind(id),
+    env.DB.prepare('SELECT coreografia_id, jurado_id, finalizado_em FROM finalizacoes WHERE evento_id = ?1').bind(id),
   ]);
+  const finalizadas = new Map();
+  for (const f of fin.results) {
+    (finalizadas.get(f.coreografia_id) || finalizadas.set(f.coreografia_id, {}).get(f.coreografia_id))[f.jurado_id] = f.finalizado_em;
+  }
   const ativos = new Set(jur.results.filter((j) => j.ativo).map((j) => j.id));
   const notas = new Map();
   for (const n of not.results) (notas.get(n.coreografia_id) || notas.set(n.coreografia_id, {}).get(n.coreografia_id))[n.jurado_id] = n.nota;
@@ -819,7 +824,7 @@ export async function quadroNotas(request, env, { id }) {
     const validas = Object.entries(n).filter(([j]) => ativos.has(j)).map(([, v]) => v);
     lancadas += validas.length;
     const media = validas.length ? Math.round((validas.reduce((s, v) => s + v, 0) / validas.length) * 10000) / 10000 : null;
-    return { ...c, notas: n, audios: audios.get(c.id) || {}, media, qtd_notas: validas.length };
+    return { ...c, notas: n, audios: audios.get(c.id) || {}, finalizadas: finalizadas.get(c.id) || {}, media, qtd_notas: validas.length };
   });
   return json({
     evento: {
@@ -828,9 +833,25 @@ export async function quadroNotas(request, env, { id }) {
     },
     jurados: jur.results,
     coreografias,
-    resumo: { coreografias: coreografias.length, jurados_ativos: ativos.size, notas_lancadas: lancadas, notas_esperadas: coreografias.length * ativos.size },
+    resumo: { coreografias: coreografias.length, jurados_ativos: ativos.size, notas_lancadas: lancadas, notas_esperadas: coreografias.length * ativos.size,
+      finalizadas: fin.results.filter((f) => ativos.has(f.jurado_id)).length },
     gerado_em: Date.now(),
   });
+}
+
+/* DELETE /api/admin/eventos/:id/finalizacoes/:coreografia/:jurado
+   Reabre a avaliação de um jurado numa coreografia (ex.: finalizou por engano). Geral ou responsável do evento. */
+export async function reabrirAvaliacao(request, env, { id, coreografia, jurado }) {
+  const a = await exigirEvento(request, env, id);
+  const r = await env.DB.prepare('DELETE FROM finalizacoes WHERE evento_id = ?1 AND coreografia_id = ?2 AND jurado_id = ?3')
+    .bind(id, coreografia, jurado)
+    .run();
+  if (!r.meta.changes) throw new ErroHttp(404, 'Esta avaliação não está finalizada', 'nao_encontrado');
+  const info = await env.DB.prepare(
+    'SELECT c.numero, j.email FROM coreografias c, jurados j WHERE c.id = ?1 AND j.id = ?2',
+  ).bind(coreografia, jurado).first();
+  await auditar(env, request, { eventoId: id, ator: a.ator, acao: 'avaliacao_reaberta', alvo: coreografia, detalhes: { numero: info?.numero, jurado: info?.email } });
+  return json({ ok: true });
 }
 
 /* ================================ GRAVAÇÕES ================================ */

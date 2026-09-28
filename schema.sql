@@ -7,7 +7,7 @@
 --   • Terminal: npx wrangler d1 execute updance-festival_db --remote --file=schema.sql
 --
 -- Pode ser executado mais de uma vez (tudo usa IF NOT EXISTS; nada é apagado).
--- A última consulta lista as tabelas criadas: devem aparecer 12.
+-- A última consulta lista as tabelas criadas: devem aparecer 13.
 --
 -- Banco criado com a versão ANTERIOR deste arquivo? Execute atualizacao-notas-ranking.sql.
 -- ============================================================================
@@ -154,6 +154,16 @@ CREATE TABLE IF NOT EXISTS notas (
   PRIMARY KEY (coreografia_id, jurado_id)
 );
 CREATE INDEX IF NOT EXISTS idx_notas_evento ON notas(evento_id);
+
+-- Avaliação finalizada pelo jurado: depois disso ele não altera a nota nem grava de novo nessa coreografia
+CREATE TABLE IF NOT EXISTS finalizacoes (
+  coreografia_id  TEXT NOT NULL REFERENCES coreografias(id),
+  jurado_id       TEXT NOT NULL REFERENCES jurados(id),
+  evento_id       TEXT NOT NULL REFERENCES eventos(id),
+  finalizado_em   INTEGER NOT NULL,
+  PRIMARY KEY (coreografia_id, jurado_id)
+);
+CREATE INDEX IF NOT EXISTS idx_finalizacoes_evento ON finalizacoes(evento_id);
 
 CREATE TABLE IF NOT EXISTS trechos (
   gravacao_id  TEXT NOT NULL REFERENCES gravacoes(id),

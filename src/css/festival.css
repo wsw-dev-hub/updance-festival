@@ -198,3 +198,23 @@ body.pausado .btn-pausar { background: var(--udx-pausado); border-color: transpa
 .mensagem { min-height: 1.3em; margin: 6px 0 0; color: var(--udx-erro); font-size: 14px; font-weight: 500; }
 .mensagem.ok { color: var(--udx-ok); }
 .rodape-acesso { color: var(--udx-text-muted); font-size: 12.5px; margin: 14px 0 0; text-align: center; }
+
+/* Finalizar avaliação */
+.finalizar-area { display: grid; gap: 6px; }
+.btn-finalizar {
+  min-height: 56px; font-size: 17px; font-weight: 600; background: transparent; color: var(--udx-ok);
+  border: 2px solid var(--udx-ok);
+}
+.btn-finalizar:not(:disabled):hover { background: color-mix(in srgb, var(--udx-ok) 14%, transparent); }
+.btn-finalizar:disabled { color: var(--udx-text-muted); border-color: var(--udx-border); opacity: .75; }
+.finalizar-dica { margin: 0; font-size: 12.5px; color: var(--udx-text-muted); text-align: center; min-height: 1.3em; }
+.finalizar-dica.pronto { color: var(--udx-primary-orange); }
+.tudo-finalizado {
+  display: grid; justify-items: center; gap: 6px; text-align: center; padding: 22px 16px;
+  border-radius: var(--udx-radius-lg); background: var(--udx-card); border: 1px solid var(--udx-ok);
+}
+.tudo-finalizado .mdi { font-size: 44px; color: var(--udx-ok); }
+.tudo-finalizado strong { font-size: 18px; }
+.tudo-finalizado p { margin: 0; color: var(--udx-text-muted); font-size: 14px; }
+body.avaliacoes-concluidas .coreografia, body.avaliacoes-concluidas .nota-area, body.avaliacoes-concluidas .relogio,
+body.avaliacoes-concluidas .controles, body.avaliacoes-concluidas .finalizar-area { display: none; }

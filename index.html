@@ -126,6 +126,11 @@
     <div id="alerta" class="alerta" role="alert" hidden></div>
 
     <main class="palco">
+      <div id="tudo-finalizado" class="tudo-finalizado" role="status" hidden>
+        <i class="mdi mdi-check-decagram" aria-hidden="true"></i>
+        <strong>Todas as avaliações foram finalizadas</strong>
+        <p>Obrigado! As coreografias continuam na lista abaixo, mas não podem mais ser alteradas. Se precisar corrigir alguma, fale com a organização.</p>
+      </div>
       <div class="coreografia">
         <button id="btn-anterior" class="btn btn-seta" type="button" aria-label="Coreografia anterior"><i class="mdi mdi-chevron-left"></i><span class="rotulo-alt">‹</span></button>
         <div class="coreografia-info">
@@ -167,6 +172,12 @@
           <span class="encerrar-texto"><i class="mdi mdi-stop"></i> Segure para encerrar</span>
         </button>
       </div>
+
+      <!-- FINALIZAR: conclui a avaliação desta coreografia (nota + áudios ficam bloqueados para o jurado) -->
+      <section id="finalizar-area" class="finalizar-area">
+        <button id="btn-finalizar" class="btn btn-finalizar" type="button"><i class="mdi mdi-lock-check-outline"></i> Finalizar avaliação</button>
+        <p id="finalizar-dica" class="finalizar-dica" role="status" aria-live="polite"></p>
+      </section>
     </main>
 
     <details class="fila">

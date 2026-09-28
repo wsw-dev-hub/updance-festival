@@ -128,6 +128,7 @@ function aplicarDados(d) {
     eventos: d.eventos,
     coreografias: d.coreografias,
     gravacoes: d.gravacoes,
+    finalizadas: d.finalizadas || {},
     diferenca_relogio: d.diferenca_relogio,
     dono: `${d.evento.id}:${d.conta.email}`,
   };
@@ -442,11 +443,23 @@ async function recalcularGravadas() {
 }
 
 const jaGravada = (id) => estado.gravadasServidor.has(id) || estado.gravadasLocal.has(id);
+const finalizada = (id) => !!estado.sessao?.finalizadas?.[id];
 const coreografiaAtual = () => estado.sessao?.coreografias[estado.indice];
+const disponiveis = () => (estado.sessao?.coreografias || []).filter((c) => !finalizada(c.id));
 
+/** Primeira coreografia ainda não gravada (e não finalizada); senão, a primeira não finalizada. */
 function primeiraNaoGravada() {
-  const i = estado.sessao.coreografias.findIndex((c) => !jaGravada(c.id));
+  const lista = estado.sessao.coreografias;
+  let i = lista.findIndex((c) => !finalizada(c.id) && !jaGravada(c.id));
+  if (i < 0) i = lista.findIndex((c) => !finalizada(c.id));
   return i >= 0 ? i : 0;
+}
+
+/** Próxima coreografia disponível (não finalizada) a partir de "indice", no sentido "passo" (+1 / -1). */
+function vizinhaDisponivel(indice, passo) {
+  const lista = estado.sessao.coreografias;
+  for (let i = indice + passo; i >= 0 && i < lista.length; i += passo) if (!finalizada(lista[i].id)) return i;
+  return -1;
 }
 
 function montarLista() {
@@ -456,7 +469,9 @@ function montarLista() {
       o.value = String(i);
       const n = notas.notaDe(estado.sessao.dono, c.id);
       const nota = n && n.nota !== null ? ` · nota ${notas.formatar(n.nota, casasNota())}${n.pendente ? '*' : ''}` : '';
-      o.textContent = `${num(c.numero)} · ${c.nome}${jaGravada(c.id) ? ' ✓' : ''}${nota}`;
+      const fechada = finalizada(c.id);
+      o.disabled = fechada; // continua na lista, mas não pode ser aberta
+      o.textContent = `${fechada ? '🔒 ' : ''}${num(c.numero)} · ${c.nome}${jaGravada(c.id) ? ' ✓' : ''}${nota}${fechada ? ' · finalizada' : ''}`;
       return o;
     }),
   );
@@ -464,6 +479,16 @@ function montarLista() {
 }
 
 function renderizarCoreografia() {
+  const gravandoAgora = estado.gravador.estado !== 'inactive';
+  // Coreografia atual finalizada (aqui ou em outro aparelho): vai para a próxima disponível
+  if (!gravandoAgora && coreografiaAtual() && finalizada(coreografiaAtual().id)) {
+    const prox = vizinhaDisponivel(estado.indice, 1);
+    estado.indice = prox >= 0 ? prox : Math.max(vizinhaDisponivel(estado.indice, -1), estado.indice);
+  }
+  const tudoFinalizado = !!estado.sessao.coreografias.length && !disponiveis().length && !gravandoAgora;
+  document.body.classList.toggle('avaliacoes-concluidas', tudoFinalizado);
+  $('tudo-finalizado').hidden = !tudoFinalizado;
+
   const c = coreografiaAtual();
   const vazio = !c;
   const gravando = estado.gravador.estado !== 'inactive';
@@ -475,12 +500,67 @@ function renderizarCoreografia() {
   $('selo-gravada').hidden = vazio || !jaGravada(c.id);
   $('selo-gravada').textContent = '✓ comentário já gravado';
   $('lista-coreografias').value = String(estado.indice);
-  $('btn-gravar').disabled = vazio || !aberto;
+  $('btn-gravar').disabled = vazio || !aberto || finalizada(c.id);
   if (!gravando) $('estado-texto').textContent = aberto ? 'Pronto para gravar' : `O evento abre em ${hora(estado.sessao.evento.abre_em)}`;
-  $('btn-anterior').disabled = gravando || estado.indice <= 0;
-  $('btn-proxima').disabled = gravando || estado.indice >= estado.sessao.coreografias.length - 1;
+  $('btn-anterior').disabled = gravando || vizinhaDisponivel(estado.indice, -1) < 0;
+  $('btn-proxima').disabled = gravando || vizinhaDisponivel(estado.indice, 1) < 0;
   $('lista-coreografias').disabled = gravando;
   renderizarNota();
+  renderizarFinalizar();
+}
+
+/* ------------------------------ Finalizar avaliação ------------------------------ */
+
+/** Pode finalizar? Nota registrada no servidor, nenhum áudio desta coreografia ainda na fila, com internet. */
+function situacaoFinalizar(c) {
+  if (!c || finalizada(c.id)) return { pode: false, motivo: '' };
+  if (agoraServidor() < (estado.sessao.evento.abre_em || 0)) return { pode: false, motivo: 'Disponível depois da abertura do evento.' };
+  const n = notas.notaDe(estado.sessao.dono, c.id);
+  if (!n || n.nota === null) return { pode: false, motivo: 'Registre a nota para poder finalizar.' };
+  if (n.erro) return { pode: false, motivo: 'Corrija a nota para poder finalizar.' };
+  if (n.pendente) return { pode: false, motivo: 'Aguardando a nota ser enviada…' };
+  if (estado.audiosNaFila?.has(c.id)) return { pode: false, motivo: 'Aguarde o envio do áudio (↻) para finalizar.' };
+  if (estado.offline || !navigator.onLine) return { pode: false, motivo: 'Finalizar precisa de internet.' };
+  return { pode: true, motivo: 'Depois de finalizar, a nota e os áudios desta coreografia não poderão mais ser alterados.' };
+}
+
+function renderizarFinalizar() {
+  const c = coreografiaAtual();
+  const gravando = estado.gravador.estado !== 'inactive';
+  $('finalizar-area').hidden = !c || gravando || finalizada(c?.id);
+  if (!c) return;
+  const s = situacaoFinalizar(c);
+  $('btn-finalizar').disabled = !s.pode || estado.finalizando;
+  $('finalizar-dica').textContent = s.motivo;
+  $('finalizar-dica').className = `finalizar-dica${s.pode ? ' pronto' : ''}`;
+}
+
+async function finalizarAtual() {
+  const c = coreografiaAtual();
+  const s = situacaoFinalizar(c);
+  if (!s.pode || estado.gravador.estado !== 'inactive') return renderizarFinalizar();
+  const n = notas.notaDe(estado.sessao.dono, c.id);
+  const ids = new Set([...(estado.sessao.gravacoes || []), ...(estado.gravacoesLocais || [])].filter((g) => g.coreografia_id === c.id).map((g) => g.id));
+  const qtdAudios = ids.size;
+  const audios = qtdAudios ? `${qtdAudios} comentário(s) em áudio` : 'NENHUM comentário em áudio gravado';
+  if (!confirm(`Finalizar a avaliação de ${num(c.numero)} · ${c.nome}?\n\nNota ${notas.formatar(n.nota, casasNota())} · ${audios}.\n\nDepois de finalizar, você NÃO poderá mais alterar a nota nem gravar novos comentários para esta coreografia.`)) return;
+  estado.finalizando = true;
+  renderizarFinalizar();
+  try {
+    const r = await api.finalizarAvaliacao(c.id);
+    estado.sessao.finalizadas = { ...estado.sessao.finalizadas, [c.id]: r.finalizado_em };
+    api.salvarCache(estado.sessao);
+    vibrar([40, 60, 40]);
+    mostrarAlerta(`✓ Avaliação da ${num(c.numero)} finalizada.`);
+    if (disponiveis().length) estado.indice = primeiraNaoGravada();
+    montarLista();
+  } catch (e) {
+    mostrarAlerta(e.status === 0 ? 'Sem conexão: finalize quando a internet voltar.' : e.message);
+    if (e.codigo === 'avaliacao_finalizada') await atualizarDoServidor();
+  } finally {
+    estado.finalizando = false;
+    renderizarCoreografia();
+  }
 }
 
 /* ------------------------------ Nota da coreografia ------------------------------ */
@@ -535,7 +615,7 @@ function ajustarNota(sinal) {
 async function salvarNotaAtual(e) {
   e?.preventDefault();
   const c = coreografiaAtual();
-  if (!c) return;
+  if (!c || finalizada(c.id)) return;
   const r = notas.interpretar($('campo-nota').value, estado.sessao.evento);
   if (r.erro) {
     $('nota-status').className = 'nota-status erro';
@@ -562,12 +642,15 @@ async function enviarNotas() {
   if (estado.sessao) {
     montarLista();
     renderizarNota();
+    renderizarFinalizar();
   }
 }
 
 function irPara(indice) {
   if (estado.gravador.estado !== 'inactive') return;
-  estado.indice = Math.min(Math.max(indice, 0), estado.sessao.coreografias.length - 1);
+  const i = Math.min(Math.max(indice, 0), estado.sessao.coreografias.length - 1);
+  if (finalizada(estado.sessao.coreografias[i]?.id)) return renderizarCoreografia(); // finalizada: não abre
+  estado.indice = i;
   renderizarCoreografia();
 }
 
@@ -575,7 +658,7 @@ function irPara(indice) {
 
 async function gravar() {
   const c = coreografiaAtual();
-  if (!c || estado.gravador.estado !== 'inactive') return;
+  if (!c || estado.gravador.estado !== 'inactive' || finalizada(c.id)) return;
   if (jaGravada(c.id) && !confirm(`Já existe comentário para ${num(c.numero)} · ${c.nome}.\nGravar uma nova versão?`)) return;
 
   try {
@@ -645,13 +728,15 @@ async function encerrar() {
   aplicarEstadoVisual();
 
   montarLista();
+  // Fica na mesma coreografia: o jurado pode gravar outro comentário, ajustar a nota e, quando terminar,
+  // tocar em "Finalizar avaliação" (é o Finalizar que leva à próxima).
   const semNota = notas.notaDe(estado.sessao.dono, g.coreografia_id)?.nota == null;
+  const n = num(coreografiaAtual()?.numero ?? 0);
   if (semNota) {
-    // Comentário salvo: fica na mesma coreografia para o jurado lançar a nota junto
-    mostrarAlerta(`Comentário da ${num(coreografiaAtual()?.numero ?? 0)} salvo. Agora registre a nota da coreografia.`);
+    mostrarAlerta(`Comentário da ${n} salvo. Agora registre a nota da coreografia.`);
     setTimeout(() => $('campo-nota').focus(), 50);
-  } else if (estado.indice < estado.sessao.coreografias.length - 1) {
-    estado.indice++; // próxima coreografia
+  } else {
+    mostrarAlerta(`Comentário da ${n} salvo. Grave outro, ajuste a nota ou toque em "Finalizar avaliação" quando terminar.`);
   }
   renderizarCoreografia();
   sinc.agendar(0);
@@ -726,6 +811,10 @@ function ligarSegurarParaEncerrar() {
 /* ------------------------------ Status / fila ------------------------------ */
 
 function renderizarStatus(r) {
+  // coreografias com áudio ainda não enviado (bloqueiam o Finalizar)
+  estado.gravacoesLocais = r.gravacoes.filter((g) => !g.erro);
+  estado.audiosNaFila = new Set(r.gravacoes.filter((g) => g.status !== 'enviada' && !g.erro).map((g) => g.coreografia_id));
+  if (estado.sessao && $('tela-principal').hidden === false) renderizarFinalizar();
   const el = $('status-envio');
   el.className = 'status-envio';
   if (r.comErro) {
@@ -820,8 +909,9 @@ function ligarEventos() {
   );
   $('btn-gravar').addEventListener('click', gravar);
   $('btn-pausar').addEventListener('click', alternarPausa);
-  $('btn-anterior').addEventListener('click', () => irPara(estado.indice - 1));
-  $('btn-proxima').addEventListener('click', () => irPara(estado.indice + 1));
+  $('btn-anterior').addEventListener('click', () => irPara(vizinhaDisponivel(estado.indice, -1)));
+  $('btn-proxima').addEventListener('click', () => irPara(vizinhaDisponivel(estado.indice, 1)));
+  $('btn-finalizar').addEventListener('click', finalizarAtual);
   $('lista-coreografias').addEventListener('change', (e) => irPara(Number(e.target.value)));
   $('form-nota').addEventListener('submit', salvarNotaAtual);
   $('btn-nota-menos').addEventListener('click', () => ajustarNota(-1));
@@ -831,6 +921,7 @@ function ligarEventos() {
     $('nota-status').textContent = 'Toque em Salvar para registrar a nota.';
   });
   window.addEventListener('online', () => enviarNotas());
+  for (const ev of ['online', 'offline']) window.addEventListener(ev, () => estado.sessao && !$('tela-principal').hidden && renderizarFinalizar());
   $('btn-sair').addEventListener('click', sairDaConta);
   $('btn-testar-mic').addEventListener('click', testarMicrofone);
   $('btn-mic-continuar').addEventListener('click', concluirTesteMicrofone);

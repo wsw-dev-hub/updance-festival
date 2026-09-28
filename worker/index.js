@@ -17,7 +17,7 @@
  *   GET  /api/admin/me          → admin logado (ou 401)
  *
  * FESTIVAL:
- *   /api/sessao, /api/gravacoes/*, /api/notas/*   app do jurado (exige m_session)
+ *   /api/sessao, /api/gravacoes/*, /api/notas/*, /api/finalizar/*   app do jurado (exige m_session)
  *   /api/admin/*                                  área de admin (exige a_session)
  *       nível "geral": controle geral (/admin/) + qualquer evento
  *       nível "responsavel": cria e administra os seus eventos (/admin/eventos/ e /admin/evento/)
@@ -60,6 +60,7 @@ const r = new Roteador()
   .rota('PUT', '/api/gravacoes/:id/trechos/:seq', jurado.enviarTrecho)
   .rota('POST', '/api/gravacoes/:id/finalizar', jurado.finalizarGravacao)
   .rota('PUT', '/api/notas/:coreografia', jurado.salvarNota)
+  .rota('POST', '/api/finalizar/:coreografia', jurado.finalizarAvaliacao)
 
   // ---- ADMIN: cadastros ----
   .rota('GET', '/api/admin/admins', admin.listarAdmins)
@@ -87,6 +88,7 @@ const r = new Roteador()
   .rota('GET', '/api/admin/eventos/:id/grupos', admin.listarGruposEvento)
   .rota('POST', '/api/admin/eventos/:id/grupos', admin.criarGrupo)
   .rota('GET', '/api/admin/eventos/:id/notas', admin.quadroNotas)
+  .rota('DELETE', '/api/admin/eventos/:id/finalizacoes/:coreografia/:jurado', admin.reabrirAvaliacao)
   .rota('POST', '/api/admin/eventos/:id/coreografias', admin.adicionarCoreografias)
   .rota('GET', '/api/admin/eventos/:id/gravacoes', admin.listarGravacoes)
   .rota('GET', '/api/admin/gravacoes/:id/audio', admin.ouvirGravacao)
