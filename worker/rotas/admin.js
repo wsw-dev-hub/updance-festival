@@ -2,7 +2,7 @@
 //
 // Níveis (worker/lib/permissoes.js):
 //   geral        → dashboard de controle geral: visão de todos os eventos, contas (admins, jurados),
-//                  grupos, auditoria. Também cria eventos e acessa a tela de qualquer evento.
+//                  grupos. Também cria eventos e acessa a tela de qualquer evento.
 //   responsavel  → autonomia sobre os SEUS eventos: cria eventos (e vira responsável por eles),
 //                  cadastra responsáveis, grupos/escolas, jurados e coreografias do evento,
 //                  acompanha notas, ranking e áudios, gera links de entrega.
@@ -12,7 +12,6 @@ import { exigirAdmin } from '../lib/sessao.js';
 import { exigirGeral, exigirEvento, exigirRegistroDoEvento } from '../lib/permissoes.js';
 import { aleatorio, sha256Hex } from '../lib/cripto.js';
 import { gerarHash, gerarSenhaProvisoria } from '../lib/senha.js';
-import { auditar } from '../lib/auditoria.js';
 import { servirAudio } from '../lib/midia.js';
 import { chaveTrecho } from './jurado.js';
 
@@ -117,9 +116,8 @@ export async function resumoGeral(request, env) {
             (SELECT COUNT(*) FROM gravacoes WHERE status = 'completo') AS audios,
             (SELECT COUNT(*) FROM gravacoes WHERE status <> 'completo') AS audios_parciais,
             (SELECT COALESCE(SUM(tamanho), 0) FROM gravacoes) AS bytes_audios,
-            (SELECT COUNT(*) FROM notas) AS notas,
-            (SELECT COUNT(*) FROM auditoria WHERE acao LIKE 'login_%_falhou' AND criado_em > ?2) AS logins_falhos_24h`,
-  ).bind(agora, agora - 86400_000).first();
+            (SELECT COUNT(*) FROM notas) AS notas`,
+  ).bind(agora).first();
   return json({ ...r, gerado_em: agora });
 }
 
@@ -161,7 +159,6 @@ export async function criarAdmin(request, env) {
     throw new ErroHttp(409, 'Já existe um administrador com este e-mail', 'email_existente');
   }
   const { id, senha } = await novoAdmin(env, { nome, email: e, nivel, criadoPor: a.email });
-  await auditar(env, request, { ator: a.ator, acao: 'admin_criado', alvo: e, detalhes: { nivel } });
   return comSenha({ id, nome, email: e, nivel }, senha, 201);
 }
 
@@ -183,7 +180,6 @@ export async function atualizarAdmin(request, env, { id }) {
   await env.DB.prepare('UPDATE admins SET nome = ?1, ativo = ?2, nivel = ?3, sessao_versao = sessao_versao + ?4 WHERE id = ?5')
     .bind(nome, ativo, nivel, mudouAcesso ? 1 : 0, id)
     .run();
-  await auditar(env, request, { ator: a.ator, acao: ativo ? 'admin_atualizado' : 'admin_desativado', alvo: alvo.email, detalhes: { nivel } });
   return json({ ok: true, nome, ativo: !!ativo, nivel });
 }
 
@@ -193,7 +189,6 @@ export async function redefinirSenhaAdmin(request, env, { id }) {
   const alvo = await umOu404(env, 'SELECT * FROM admins WHERE id = ?1', id, 'Administrador');
   if (alvo.id === a.id) throw new ErroHttp(422, 'Para a sua conta, use "Minha conta → Trocar senha"', 'auto_redefinicao');
   const senha = await redefinirConta(env, 'admins', id);
-  await auditar(env, request, { ator: a.ator, acao: 'admin_senha_redefinida', alvo: alvo.email });
   return comSenha({ id, email: alvo.email }, senha);
 }
 
@@ -276,7 +271,6 @@ export async function atualizarJurado(request, env, { id }) {
   await env.DB.prepare('UPDATE jurados SET nome = ?1, telefone = ?2, ativo = ?3, sessao_versao = sessao_versao + ?4 WHERE id = ?5')
     .bind(nome, telefone, ativo, ativo !== j.ativo ? 1 : 0, id)
     .run();
-  await auditar(env, request, { ator: a.ator, acao: ativo ? 'jurado_atualizado' : 'jurado_desativado', alvo: j.email });
   return json({ ok: true, nome, telefone, ativo: !!ativo });
 }
 
@@ -288,7 +282,6 @@ export async function redefinirSenhaJurado(request, env, { id }) {
   if (!(await juradoAoAlcance(env, a, id))) throw new ErroHttp(404, 'Jurado não encontrado(a)', 'nao_encontrado');
   await exigirContaExclusiva(env, a, 'evento_jurados', 'jurado_id', id);
   const senha = await redefinirConta(env, 'jurados', id);
-  await auditar(env, request, { ator: a.ator, acao: 'jurado_senha_redefinida', alvo: j.email });
   return comSenha({ id, email: j.email }, senha);
 }
 
@@ -364,7 +357,6 @@ export async function criarGrupo(request, env, { id: eventoId }) {
   )
     .bind(id, g.nome, chave, g.cidade, g.responsavel, g.email, g.telefone, Date.now(), g.integrantes, g.coreografo, g.diretores, g.coordenadores, eventoId)
     .run();
-  await auditar(env, request, { eventoId, ator: a.ator, acao: 'grupo_criado', alvo: g.nome });
   return json({ id, evento_id: eventoId, ...g }, 201);
 }
 
@@ -383,7 +375,6 @@ export async function atualizarGrupo(request, env, { id }) {
   )
     .bind(g.nome, chave, g.cidade, g.responsavel, g.email, g.telefone, g.integrantes, g.coreografo, g.diretores, g.coordenadores, id)
     .run();
-  await auditar(env, request, { eventoId: atual.evento_id, ator: a.ator, acao: 'grupo_atualizado', alvo: g.nome });
   return json({ id, evento_id: atual.evento_id, ...g });
 }
 
@@ -393,7 +384,6 @@ export async function excluirGrupo(request, env, { id }) {
   const { n } = await env.DB.prepare('SELECT COUNT(*) AS n FROM coreografias WHERE grupo_id = ?1').bind(id).first();
   if (n) throw new ErroHttp(409, `O grupo tem ${n} coreografia(s) vinculada(s)`, 'grupo_em_uso');
   await env.DB.prepare('DELETE FROM grupos WHERE id = ?1').bind(id).run();
-  await auditar(env, request, { eventoId: g.evento_id, ator: a.ator, acao: 'grupo_excluido', alvo: g.nome });
   return json({ ok: true });
 }
 
@@ -466,7 +456,6 @@ export async function criarEvento(request, env) {
     .bind(id, ev.nome, ev.data, ev.local, ev.abre_em, ev.fecha_em, ev.anonimizar_jurados, ev.duracao_max_s, a.email, Date.now(),
       ev.nota_min, ev.nota_max, ev.nota_casas)
     .run();
-  await auditar(env, request, { eventoId: id, ator: a.ator, acao: 'evento_criado', alvo: id, detalhes: { nome: ev.nome } });
   const responsaveis = [];
   if (a.nivel !== 'geral') {
     await env.DB.prepare('INSERT INTO evento_responsaveis (evento_id, admin_id, criado_por, criado_em) VALUES (?1, ?2, ?3, ?4)')
@@ -493,7 +482,6 @@ export async function atualizarEvento(request, env, { id }) {
     .bind(ev.nome, ev.data, ev.local, ev.abre_em, ev.fecha_em, ev.anonimizar_jurados, ev.duracao_max_s,
       ev.nota_min, ev.nota_max, ev.nota_casas, id)
     .run();
-  await auditar(env, request, { eventoId: id, ator: a.ator, acao: 'evento_atualizado', alvo: id });
   return json({ id, ...ev });
 }
 
@@ -531,10 +519,11 @@ export async function detalharEvento(request, env, { id }) {
     env.DB.prepare(
       `SELECT c.*, g.nome AS grupo,
               (SELECT COUNT(*) FROM gravacoes gr WHERE gr.coreografia_id = c.id) AS n_gravacoes,
-              (SELECT COUNT(*) FROM notas n WHERE n.coreografia_id = c.id) AS n_notas
+              (SELECT COUNT(*) FROM notas n WHERE n.coreografia_id = c.id) AS n_notas,
+              (SELECT MAX(l.expira_em) FROM links_entrega l WHERE l.coreografia_id = c.id AND l.revogado = 0 AND l.expira_em > ?2) AS link_expira_em
          FROM coreografias c LEFT JOIN grupos g ON g.id = c.grupo_id
         WHERE c.evento_id = ?1 ORDER BY c.numero`,
-    ).bind(id),
+    ).bind(id, Date.now()),
     env.DB.prepare(
       `SELECT j.id, j.nome, j.email, j.telefone, j.ativo AS conta_ativa, j.trocar_senha, j.ultimo_acesso, ej.ordem, ej.ativo
          FROM evento_jurados ej JOIN jurados j ON j.id = ej.jurado_id
@@ -575,7 +564,6 @@ export async function escalarJurado(request, env, { id }) {
       const criado = await novoJurado(env, { nome, email: e, telefone: texto(b.telefone, 40, false) || null, criadoPor: a.email });
       j = { id: criado.id, email: e, nome, ativo: 1 };
       senha = criado.senha;
-      await auditar(env, request, { eventoId: id, ator: a.ator, acao: 'jurado_criado', alvo: e });
     }
   }
   if (!j.ativo) throw new ErroHttp(422, 'Esta conta de jurado está desativada. Peça à organização para reativá-la.', 'conta_desativada');
@@ -586,7 +574,6 @@ export async function escalarJurado(request, env, { id }) {
   await env.DB.prepare('INSERT INTO evento_jurados (evento_id, jurado_id, ordem, criado_em) VALUES (?1, ?2, ?3, ?4)')
     .bind(id, j.id, ordem, Date.now())
     .run();
-  await auditar(env, request, { eventoId: id, ator: a.ator, acao: 'jurado_escalado', alvo: j.email, detalhes: { ordem } });
   const resp = { ok: true, jurado_id: j.id, nome: j.nome, email: j.email, ordem, criado: !!senha, link: `${new URL(request.url).origin}/?evento=${id}` };
   return senha ? comSenha(resp, senha, 201) : json(resp, 201);
 }
@@ -599,7 +586,6 @@ export async function atualizarEscala(request, env, { id, jurado }) {
     .bind(ativo ? 1 : 0, id, jurado)
     .run();
   if (!r.meta.changes) throw new ErroHttp(404, 'Escala não encontrada', 'nao_encontrado');
-  await auditar(env, request, { eventoId: id, ator: a.ator, acao: ativo ? 'escala_ativada' : 'escala_suspensa', alvo: jurado });
   return json({ ok: true, ativo: !!ativo });
 }
 
@@ -617,13 +603,11 @@ async function vincularResponsavel(env, request, a, eventoId, { nome, email: em 
     const criado = await novoAdmin(env, { nome: n, email: e, nivel: 'responsavel', criadoPor: a.email });
     alvo = { id: criado.id, nome: n, email: e };
     senha = criado.senha;
-    await auditar(env, request, { eventoId, ator: a.ator, acao: 'admin_criado', alvo: e, detalhes: { nivel: 'responsavel' } });
   }
   const r = await env.DB.prepare('INSERT OR IGNORE INTO evento_responsaveis (evento_id, admin_id, criado_por, criado_em) VALUES (?1, ?2, ?3, ?4)')
     .bind(eventoId, alvo.id, a.email, Date.now())
     .run();
   if (!r.meta.changes) throw new ErroHttp(409, 'Esta pessoa já é responsável pelo evento', 'ja_responsavel');
-  await auditar(env, request, { eventoId, ator: a.ator, acao: 'responsavel_adicionado', alvo: e });
   return { id: alvo.id, nome: alvo.nome, email: e, criado: !!senha, ...(senha ? { senha_provisoria: senha } : {}) };
 }
 
@@ -646,7 +630,6 @@ export async function removerResponsavel(request, env, { id, admin }) {
   const r = await env.DB.prepare('DELETE FROM evento_responsaveis WHERE evento_id = ?1 AND admin_id = ?2').bind(id, admin).run();
   if (!r.meta.changes) throw new ErroHttp(404, 'Responsável não encontrado', 'nao_encontrado');
   await env.DB.prepare('UPDATE admins SET sessao_versao = sessao_versao + 1 WHERE id = ?1').bind(admin).run();
-  await auditar(env, request, { eventoId: id, ator: a.ator, acao: 'responsavel_removido', alvo: admin });
   return json({ ok: true });
 }
 
@@ -661,7 +644,6 @@ export async function redefinirSenhaResponsavel(request, env, { id, admin }) {
   if (alvo.id === a.id) throw new ErroHttp(422, 'Para a sua conta, use "Minha conta → Trocar senha"', 'auto_redefinicao');
   await exigirContaExclusiva(env, a, 'evento_responsaveis', 'admin_id', alvo.id);
   const senha = await redefinirConta(env, 'admins', alvo.id);
-  await auditar(env, request, { eventoId: id, ator: a.ator, acao: 'responsavel_senha_redefinida', alvo: alvo.email });
   return comSenha({ id: alvo.id, email: alvo.email }, senha);
 }
 
@@ -720,7 +702,6 @@ export async function adicionarCoreografias(request, env, { id }) {
     const formacao = formacaoDe(b.formacao, b.integrantes);
     const faixa = faixaDe(b.faixa);
     await env.DB.prepare(sqlUpsertCoreografia).bind(aleatorio(12), id, numero, nome, grupoId, texto(b.categoria, 100, false) || null, formacao, faixa).run();
-    await auditar(env, request, { eventoId: id, ator: a.ator, acao: 'coreografia_salva', detalhes: { numero, nome, formacao, faixa } });
     return json({ ok: true }, 201);
   }
 
@@ -759,7 +740,6 @@ export async function adicionarCoreografias(request, env, { id }) {
     );
   }
   await env.DB.batch(stmts);
-  await auditar(env, request, { eventoId: id, ator: a.ator, acao: 'coreografias_importadas', detalhes: { quantidade: stmts.length, grupos: cache.size } });
   return json({ importadas: stmts.length, grupos: cache.size, sem_formacao: formacoes.filter((f) => !f).length, sem_faixa: faixas.filter((f) => !f).length });
 }
 
@@ -772,7 +752,6 @@ export async function excluirCoreografia(request, env, { id }) {
   ).bind(id).first();
   if (uso.n) throw new ErroHttp(409, 'A coreografia já tem gravações, notas ou links; não pode ser excluída', 'coreografia_em_uso');
   await env.DB.prepare('DELETE FROM coreografias WHERE id = ?1').bind(id).run();
-  await auditar(env, request, { eventoId: c.evento_id, ator: a.ator, acao: 'coreografia_excluida', detalhes: { numero: c.numero, nome: c.nome } });
   return json({ ok: true });
 }
 
@@ -847,10 +826,6 @@ export async function reabrirAvaliacao(request, env, { id, coreografia, jurado }
     .bind(id, coreografia, jurado)
     .run();
   if (!r.meta.changes) throw new ErroHttp(404, 'Esta avaliação não está finalizada', 'nao_encontrado');
-  const info = await env.DB.prepare(
-    'SELECT c.numero, j.email FROM coreografias c, jurados j WHERE c.id = ?1 AND j.id = ?2',
-  ).bind(coreografia, jurado).first();
-  await auditar(env, request, { eventoId: id, ator: a.ator, acao: 'avaliacao_reaberta', alvo: coreografia, detalhes: { numero: info?.numero, jurado: info?.email } });
   return json({ ok: true });
 }
 
@@ -885,7 +860,6 @@ export async function ouvirGravacao(request, env, { id }) {
 
   const range = request.headers.get('Range');
   if (!range || /^bytes=0-/.test(range)) {
-    await auditar(env, request, { eventoId: g.evento_id, ator: a.ator, acao: 'audio_acessado_admin', alvo: id });
   }
   if (g.status === 'completo') {
     return servirAudio(request, env.AUDIOS, g.r2_chave, { nomeArquivo: g.identificador, tipoMime: g.mime, download });
@@ -925,43 +899,73 @@ export async function aprovarGravacao(request, env, { id }) {
   await env.DB.prepare('UPDATE gravacoes SET aprovada = ?1, aprovada_por = ?2, aprovada_em = ?3 WHERE id = ?4')
     .bind(aprovada ? 1 : 0, a.email, Date.now(), id)
     .run();
-  await auditar(env, request, { eventoId: g.evento_id, ator: a.ator, acao: aprovada ? 'gravacao_aprovada' : 'gravacao_reprovada', alvo: id });
   return json({ ok: true });
 }
 
-/* POST /api/admin/coreografias/:id/link  { dias? } — link de entrega ao participante */
+/* ------------------------------ link exclusivo de notas e áudios (para o grupo/escola) ------------------------------
+   Cada coreografia tem UM link ativo por vez: gerar um novo revoga o anterior. Só o hash do token fica no banco. */
+
+const diasDoLink = (corpo) => Math.min(Math.max(Number(corpo?.dias) || 30, 1), 180);
+
+/** Comandos que trocam o link da coreografia (revoga os anteriores e grava o novo). */
+async function novoLink(env, c, criadoPor, dias, origem) {
+  const token = aleatorio(32);
+  const agora = Date.now();
+  const expira = agora + dias * 86400_000;
+  const stmts = [
+    env.DB.prepare('UPDATE links_entrega SET revogado = 1 WHERE coreografia_id = ?1 AND revogado = 0').bind(c.id),
+    env.DB.prepare(
+      'INSERT INTO links_entrega (token_hash, coreografia_id, evento_id, criado_por, criado_em, expira_em) VALUES (?1, ?2, ?3, ?4, ?5, ?6)',
+    ).bind(await sha256Hex(token), c.id, c.evento_id, criadoPor, agora, expira),
+  ];
+  return { stmts, url: `${origem}/ouvir/${token}`, expira_em: expira };
+}
+
+/* POST /api/admin/coreografias/:id/link  { dias? } */
 export async function criarLinkEntrega(request, env, { id }) {
   const { a, linha: c } = await exigirRegistroDoEvento(request, env, 'SELECT id, evento_id FROM coreografias WHERE id = ?1', id, 'Coreografia');
   const corpo = await lerJson(request).catch(() => ({}));
-  const dias = Math.min(Math.max(Number(corpo.dias) || 30, 1), 180);
-  const token = aleatorio(32);
-  const expira = Date.now() + dias * 86400_000;
-  await env.DB.prepare(
-    'INSERT INTO links_entrega (token_hash, coreografia_id, evento_id, criado_por, criado_em, expira_em) VALUES (?1, ?2, ?3, ?4, ?5, ?6)',
-  )
-    .bind(await sha256Hex(token), c.id, c.evento_id, a.email, Date.now(), expira)
-    .run();
-  await auditar(env, request, { eventoId: c.evento_id, ator: a.ator, acao: 'link_criado', alvo: c.id, detalhes: { dias } });
-  return json({ url: `${new URL(request.url).origin}/ouvir/${token}`, expira_em: expira }, 201);
+  const l = await novoLink(env, c, a.email, diasDoLink(corpo), new URL(request.url).origin);
+  await env.DB.batch(l.stmts);
+  return json({ url: l.url, expira_em: l.expira_em }, 201);
+}
+
+/* POST /api/admin/eventos/:id/links  { dias?, somente_sem_link? }
+   Gera o link de todas as coreografias do evento de uma vez (para enviar às escolas/grupos). */
+export async function criarLinksDoEvento(request, env, { id }) {
+  const a = await exigirEvento(request, env, id);
+  await eventoOu404(env, id);
+  const corpo = await lerJson(request).catch(() => ({}));
+  const dias = diasDoLink(corpo);
+  const agora = Date.now();
+  const { results } = await env.DB.prepare(
+    `SELECT c.id, c.evento_id, c.numero, c.nome, g.nome AS grupo, g.responsavel AS grupo_responsavel, g.email AS grupo_email,
+            g.telefone AS grupo_telefone,
+            (SELECT COUNT(*) FROM links_entrega l WHERE l.coreografia_id = c.id AND l.revogado = 0 AND l.expira_em > ?2) AS ativos
+       FROM coreografias c LEFT JOIN grupos g ON g.id = c.grupo_id WHERE c.evento_id = ?1 ORDER BY c.numero`,
+  ).bind(id, agora).all();
+  const alvo = corpo.somente_sem_link ? results.filter((c) => !c.ativos) : results;
+  const origem = new URL(request.url).origin;
+  const links = [];
+  let stmts = [];
+  for (const c of alvo) {
+    const l = await novoLink(env, c, a.email, dias, origem);
+    stmts.push(...l.stmts);
+    links.push({
+      coreografia_id: c.id, numero: c.numero, coreografia: c.nome, grupo: c.grupo, grupo_responsavel: c.grupo_responsavel,
+      grupo_email: c.grupo_email, grupo_telefone: c.grupo_telefone, url: l.url, expira_em: l.expira_em,
+    });
+    if (stmts.length >= 90) { await env.DB.batch(stmts); stmts = []; }
+  }
+  if (stmts.length) await env.DB.batch(stmts);
+  return json({ links, dias }, 201);
 }
 
 /* POST /api/admin/coreografias/:id/revogar-links */
 export async function revogarLinks(request, env, { id }) {
   const { a, linha: c } = await exigirRegistroDoEvento(request, env, 'SELECT evento_id FROM coreografias WHERE id = ?1', id, 'Coreografia');
   const r = await env.DB.prepare('UPDATE links_entrega SET revogado = 1 WHERE coreografia_id = ?1').bind(id).run();
-  await auditar(env, request, { eventoId: c.evento_id, ator: a.ator, acao: 'links_revogados', alvo: id, detalhes: { quantidade: r.meta.changes } });
   return json({ revogados: r.meta.changes });
 }
 
-/* GET /api/admin/auditoria?evento=<id> — com evento: geral ou responsável; sem evento (contas e acessos): geral */
-export async function listarAuditoria(request, env) {
-  const evento = new URL(request.url).searchParams.get('evento');
-  if (evento) await exigirEvento(request, env, evento);
-  else await exigirGeral(request, env);
-  const stmt = evento
-    ? env.DB.prepare('SELECT * FROM auditoria WHERE evento_id = ?1 ORDER BY id DESC LIMIT 500').bind(evento)
-    : env.DB.prepare('SELECT * FROM auditoria WHERE evento_id IS NULL ORDER BY id DESC LIMIT 500');
-  const { results } = await stmt.all();
-  return json(results);
-}
 

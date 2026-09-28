@@ -21,7 +21,6 @@ const CARREGAR_SECAO = {
   admins: carregarAdmins,
   jurados: carregarJurados,
   grupos: carregarGrupos,
-  auditoria: carregarAuditoriaGeral,
   conta: async () => {},
 };
 
@@ -50,7 +49,7 @@ async function carregarVisaoGeral() {
     indicador(r.notas, 'Notas lançadas'),
     indicador(r.audios, 'Áudios completos', r.audios_parciais ? `${r.audios_parciais} chegando/parcial(is)` : null),
     indicador(fmtBytes(r.bytes_audios), 'Armazenamento de áudio', 'R2 gratuito: 10 GB'),
-    indicador(r.logins_falhos_24h, 'Logins falhos (24 h)', r.contas_bloqueadas ? `${r.contas_bloqueadas} conta(s) bloqueada(s) agora` : 'nenhuma conta bloqueada'),
+    indicador(r.contas_bloqueadas, 'Contas bloqueadas agora', 'após 5 senhas erradas (15 min)'),
   );
 
   const alertas = [];
@@ -250,25 +249,6 @@ async function excluirGrupo(g) {
   await api('DELETE', `/api/admin/grupos/${g.id}`);
   aviso('Grupo excluído.');
   await carregarGrupos();
-}
-
-/* ================================ AUDITORIA ================================ */
-
-async function carregarAuditoriaGeral() {
-  const linhas = await api('GET', '/api/admin/auditoria');
-  $('tb-auditoria').replaceChildren(
-    ...(linhas.length
-      ? linhas.map((l) =>
-          el('tr', {},
-            el('td', { textContent: fmtHora(l.criado_em) }),
-            el('td', { class: 'ident', textContent: l.ator }),
-            el('td', { textContent: l.acao }),
-            el('td', { class: 'ident', textContent: l.alvo || '' }),
-            el('td', { class: 'ident', textContent: l.ip || '' }),
-          ),
-        )
-      : [vazio(5, 'Nenhum registro.')]),
-  );
 }
 
 /* ================================ INÍCIO ================================ */

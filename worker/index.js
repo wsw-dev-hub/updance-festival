@@ -95,8 +95,8 @@ const r = new Roteador()
   .rota('POST', '/api/admin/gravacoes/:id/aprovar', admin.aprovarGravacao)
   .rota('DELETE', '/api/admin/coreografias/:id', admin.excluirCoreografia)
   .rota('POST', '/api/admin/coreografias/:id/link', admin.criarLinkEntrega)
+  .rota('POST', '/api/admin/eventos/:id/links', admin.criarLinksDoEvento)
   .rota('POST', '/api/admin/coreografias/:id/revogar-links', admin.revogarLinks)
-  .rota('GET', '/api/admin/auditoria', admin.listarAuditoria)
 
   // ---- ENTREGA AO PARTICIPANTE ----
   .rota('GET', '/ouvir/:token', entrega.paginaEntrega)

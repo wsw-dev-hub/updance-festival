@@ -1,6 +1,6 @@
 # UpDance Festival · Comentários dos jurados
 
-Sistema para jurados de festivais gravarem comentários em áudio (gravar / pausar / encerrar), com envio automático, fila offline, área de admin e entrega aos participantes. Faz parte do ecossistema **Up Dance Xperience**: paleta, fontes, tema claro/escuro, ícones e layout responsivo são os mesmos dos demais apps.
+Sistema para jurados de festivais gravarem comentários em áudio (gravar / pausar / encerrar), com envio automático, fila offline, área de admin e um link exclusivo de notas e áudios de cada coreografia para as escolas/grupos. Faz parte do ecossistema **Up Dance Xperience**: paleta, fontes, tema claro/escuro, ícones e layout responsivo são os mesmos dos demais apps.
 
 Projeto único:
 - **Vite** gera as páginas em `dist/`;
@@ -12,9 +12,9 @@ Projeto único:
 | Tela | Quem usa | O que tem |
 |---|---|---|
 | `/` | jurados | Gravação do comentário em áudio **e nota da coreografia** (funciona sem internet: a nota fica guardada e é enviada quando a rede volta) |
-| `/admin/` | organização (nível **geral**) | **Painel de controle** do sistema: números gerais (eventos, responsáveis, jurados, grupos, notas, áudios, armazenamento, logins falhos), alertas (evento sem responsável, contas bloqueadas, grupos sem evento), tabela de todos os eventos, administradores, contas de jurados (nova senha, desativar), grupos de todos os eventos (consulta), auditoria geral. **Não cadastra** eventos, grupos nem jurados. |
+| `/admin/` | organização (nível **geral**) | **Painel de controle** do sistema: números gerais (eventos, responsáveis, jurados, grupos, notas, áudios, armazenamento, contas bloqueadas), alertas (evento sem responsável, contas bloqueadas, grupos sem evento), tabela de todos os eventos, administradores, contas de jurados (nova senha, desativar), grupos de todos os eventos (consulta). **Não cadastra** eventos, grupos nem jurados. |
 | `/admin/eventos/` | geral e **responsáveis** | **Eventos e responsáveis**: cria eventos (já com os responsáveis) e, em cada cartão, adiciona, remove e gera nova senha para os responsáveis. |
-| `/admin/evento/?id=…` | geral e **responsáveis do evento** | Tela de cada evento: **Notas** (jurado × coreografia, status dos áudios, média automática), **Ranking** (ranking geral por padrão; pódio das 3 maiores médias e lista completa, recalculados pelos filtros de formação, faixa e categoria), Áudios, Coreografias, **Grupos** (cadastro com equipe), **Jurados** (cadastro e escala), Auditoria. |
+| `/admin/evento/?id=…` | geral e **responsáveis do evento** | Tela de cada evento: **Notas** (jurado × coreografia, status dos áudios, média automática), **Ranking** (ranking geral por padrão; pódio das 3 maiores médias e lista completa, recalculados pelos filtros de formação, faixa e categoria), **Áudios**, **Jurados** (cadastro e escala), **Grupos** (cadastro com equipe), **Coreografias** (cadastro, CSV e links exclusivos para as escolas), Minha conta. |
 
 **Níveis de administrador:**
 - **Geral:** a organização do festival. Usa o painel de controle, vê todos os eventos e pode agir em qualquer um.
@@ -23,7 +23,7 @@ Projeto único:
   - define quem mais administra cada evento: adiciona, remove, gera nova senha (o evento nunca fica sem responsável);
   - edita dados e escala de notas;
   - cadastra **grupos/escolas** e **jurados** na tela do evento, e edita nome/telefone e senha dos jurados;
-  - cadastra coreografias, aprova áudios, gera links de entrega, acompanha notas e ranking.
+  - cadastra coreografias, gera os links exclusivos para as escolas/grupos, acompanha notas, ranking e áudios.
 
   Ele não vê o painel de controle, outros eventos, nem contas de outras equipes. Uma conta (jurado ou responsável) que também atua em evento de **outra** equipe só pode ter senha ou nome alterados pela organização geral: assim ninguém ganha acesso a evento alheio redefinindo a senha de alguém.
 
@@ -36,13 +36,22 @@ Projeto único:
 - quando todas estão finalizadas, o app mostra "Todas as avaliações foram finalizadas";
 - depois de gravar, o app fica na mesma coreografia (para gravar outro comentário, ajustar a nota ou finalizar).
 
-Na aba **Notas** da tela do evento, cada avaliação finalizada aparece com 🔒. Se o jurado finalizou por engano, a organização (geral ou responsável do evento) clica no cadeado para **reabrir**. Finalizar e reabrir ficam na auditoria.
+Na aba **Notas** da tela do evento, cada avaliação finalizada aparece com 🔒. Se o jurado finalizou por engano, a organização (geral ou responsável do evento) clica no cadeado para **reabrir**.
+
+**Link exclusivo para as escolas/grupos** (aba **Coreografias** da tela do evento): cada coreografia tem um link próprio (`/ouvir/…`, token aleatório de 256 bits; só o hash fica no banco) com a página de **notas e áudios** daquela coreografia.
+- Mostra cada jurado com a **nota** e os **comentários em áudio** (tocar e baixar) **depois que ele finaliza** a avaliação; antes disso aparece "em avaliação". A **nota final (média)** aparece quando todos os jurados ativos concluem. Com "anonimizar jurados", aparecem como "Jurado 1, 2…".
+- **Gerar link** / **Novo link** em cada linha (o link novo desativa o anterior: um link ativo por coreografia) e **Desativar link**.
+- **Gerar links e baixar planilha**: cria os links de todas as coreografias (ou só das que ainda não têm) e baixa um CSV com nº, coreografia, grupo, responsável, e-mail, telefone, link e validade, para enviar a cada escola. Validade: 7, 30, 90 ou 180 dias.
+- Os links só são mostrados no momento em que são gerados (o banco guarda só o hash): guarde a planilha.
+- Áudio **aprovado** pela organização (aba Áudios) também aparece no link antes de o jurado finalizar.
+
+**Ordem das abas da tela do evento:** Notas · Ranking · Áudios · Jurados · Grupos · Coreografias · Minha conta.
 
 **Pausar a gravação** (app do jurado): **Pausar** interrompe a captura e **Retomar** continua na mesma gravação. O trecho em pausa não é gravado: o arquivo final tem só o tempo falado, o que evita silêncios longos e reduz o tamanho. O cronômetro e o limite de duração do evento contam apenas o tempo gravado. Pausar também salva no aparelho o trecho já gravado, para ele ser enviado.
 
 **Notas e médias:**
 - A escala é definida por evento: mínima, máxima e casas decimais. O padrão é **0 a 10, uma casa**.
-- O jurado pode alterar a nota enquanto o evento aceita envios, e cada alteração fica na auditoria com o valor anterior.
+- O jurado pode alterar a nota enquanto o evento aceita envios e ele não finalizou a avaliação.
 - A **média** é a média simples das notas dos jurados **ativos** na escala. Um jurado suspenso continua aparecendo no quadro, mas sai da média.
 - **Ranking e pódio a partir dos filtros:** Formação (abas ou seletor), Faixa e Categoria.
   - **Sem nenhum filtro** (padrão ao abrir): **ranking geral**, com todas as coreografias juntas, sem segmentar. O pódio mostra as 3 maiores médias do evento.
@@ -104,7 +113,7 @@ O `npx wrangler deploy` **só publica**: ele não cria o bucket R2, não cria ta
    - **Name:** `updance-festival-audios`, exatamente assim;
    - **Location:** Automatic;
    - **Storage class:** Standard.
-3. Não ative o **Public access / r2.dev**. Os áudios só saem pelo Worker, com login ou link de entrega.
+3. Não ative o **Public access / r2.dev**. Os áudios só saem pelo Worker, com login ou pelo link exclusivo da coreografia.
 4. **Opcional, recomendado:** no bucket, abra **Settings → Object lifecycle rules → Add rule**:
    - **Name:** `trechos-7-dias`;
    - **Prefix:** `trechos/`;
@@ -141,7 +150,7 @@ npx wrangler d1 execute updance-festival_db --remote --file=schema.sql
 SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name;
 ```
 
-O resultado deve ter **13 tabelas**: `admins, auditoria, coreografias, evento_jurados, evento_responsaveis, eventos, finalizacoes, gravacoes, grupos, jurados, links_entrega, notas, trechos`.
+O resultado deve ter **12 tabelas**: `admins, coreografias, evento_jurados, evento_responsaveis, eventos, finalizacoes, gravacoes, grupos, jurados, links_entrega, notas, trechos`.
 
 > **Já executou o `schema.sql` da versão anterior (10 tabelas)?** Execute **uma vez** o `atualizacao-notas-ranking.sql`, no Console ou pelo terminal:
 >
@@ -160,8 +169,9 @@ O resultado deve ter **13 tabelas**: `admins, auditoria, coreografias, evento_ju
 > 2. **`atualizacao-grupos-por-evento.sql`**: liga cada grupo ao seu evento (coluna `evento_id`). Grupo usado em mais de um evento ganha uma cópia por evento, com a mesma equipe; grupo sem coreografia fica "sem evento" (aparece no painel de controle para excluir). Nenhuma coreografia, nota ou áudio é apagado. A consulta do fim mostra quantos grupos ficaram em cada evento.
 > 3. **`atualizacao-faixa-coreografias.sql`**: acrescenta a coluna `faixa` às coreografias (as existentes ficam "sem faixa" até alguém definir).
 > 4. **`atualizacao-finalizacao.sql`**: cria a tabela `finalizacoes` (botão "Finalizar avaliação" do jurado).
+> 5. **`atualizacao-remover-auditoria.sql`**: apaga a tabela `auditoria` (o sistema não grava mais esse histórico) e libera o espaço no D1.
 >
-> Resumo da ordem para um banco antigo: `atualizacao-notas-ranking.sql` → `atualizacao-grupos-equipe.sql` → `atualizacao-grupos-por-evento.sql` → `atualizacao-faixa-coreografias.sql` → `atualizacao-finalizacao.sql`. Pule os que já executou. Banco criado com o `schema.sql` desta versão já tem tudo e não precisa de nenhum arquivo de atualização.
+> Resumo da ordem para um banco antigo: `atualizacao-notas-ranking.sql` → `atualizacao-grupos-equipe.sql` → `atualizacao-grupos-por-evento.sql` → `atualizacao-faixa-coreografias.sql` → `atualizacao-finalizacao.sql` → `atualizacao-remover-auditoria.sql`. Pule os que já executou. Banco criado com o `schema.sql` desta versão já tem tudo e não precisa de nenhum arquivo de atualização.
 
 > **Se o banco já tinha tabelas de uma versão anterior deste projeto,** confira com a consulta abaixo:
 >
@@ -226,7 +236,7 @@ Não cadastre variáveis de texto (**Text**) pelo painel. As variáveis do `[var
 
 - [ ] `/` abre a tela de login do jurado com a marca UDX.
 - [ ] `/admin/` sem login leva para `/admin-login/`.
-- [ ] Depois do login, o **Painel de controle** mostra os números gerais e as abas Administradores, Jurados, Grupos, Auditoria e Minha conta.
+- [ ] Depois do login, o **Painel de controle** mostra os números gerais e as abas Administradores, Jurados, Grupos e Minha conta.
 - [ ] Um responsável de teste entra e cai em `/admin/eventos/`; abrir `/admin/` o leva de volta para lá.
 - [ ] Um jurado de teste entra, cria a senha, testa o microfone, grava e vê **✓ enviado**.
 - [ ] Na aba **Áudios** da tela do evento, o admin ouve o áudio.
@@ -250,6 +260,8 @@ Não cadastre variáveis de texto (**Text**) pelo painel. As variáveis do `[var
 | `POST /api/admin/login` `{email, password}` | admin | Cria a sessão (cookie `a_session`, 12 h) |
 | `POST /api/admin/logout` · `POST /api/admin/senha` · `GET /api/admin/me` | admin | Sair, trocar a senha, identificar (`nivel`: geral/responsavel) |
 | `GET /api/admin/eventos/:id/notas` | geral ou responsável | Quadro de notas: jurado × coreografia, status dos áudios, média e contagem |
+| `POST /api/admin/coreografias/:id/link` · `POST /api/admin/eventos/:id/links` | geral ou responsável | Link exclusivo de notas e áudios de uma coreografia, ou de todas (o novo desativa o anterior) |
+| `GET /ouvir/:token` | escola/grupo (público, com o link) | Página de notas e áudios da coreografia |
 | `GET /api/admin/resumo` | geral | Números e alertas do painel de controle |
 | `POST /api/admin/eventos` `{…, responsaveis:[{nome,email}]}` | geral ou responsável | Cria o evento já com os responsáveis (quem cria, se responsável, entra automaticamente) |
 | `POST` / `DELETE /api/admin/eventos/:id/responsaveis` · `POST …/responsaveis/:admin/redefinir-senha` | geral ou responsável do evento | Liga, desliga ou gera nova senha para responsáveis (o último não sai) |
@@ -261,7 +273,7 @@ Não cadastre variáveis de texto (**Text**) pelo painel. As variáveis do `[var
 - **Sessões:** ficam no KV com o prefixo `fest:`, então não se misturam com as do blog. Trocar ou redefinir a senha e desativar a conta derrubam as sessões na hora.
 - **Cookies:** HttpOnly, Secure e SameSite=Lax.
 - **Escritas:** exigem mesma origem mais o cabeçalho `X-UDX-Festival` (proteção CSRF).
-- **Auditoria:** somente inserção.
+- **Sem log de auditoria:** para economizar o banco D1, o sistema não grava histórico de ações. Falhas de envio de e-mail aparecem em **Workers & Pages → updance-festival → Logs**.
 
 ## Identidade visual e responsividade
 
@@ -302,5 +314,6 @@ atualizacao-grupos-equipe.sql   bancos criados antes da equipe dos grupos (execu
 atualizacao-grupos-por-evento.sql   bancos criados antes dos grupos por evento (executar 3º)
 atualizacao-faixa-coreografias.sql  bancos criados antes da faixa das coreografias (executar 4º)
 atualizacao-finalizacao.sql         bancos criados antes do botão Finalizar (executar 5º)
+atualizacao-remover-auditoria.sql   apaga a tabela de auditoria antiga (executar 6º)
 vite.config.js · wrangler.toml · package.json
 ```

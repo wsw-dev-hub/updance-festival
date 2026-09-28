@@ -6,7 +6,6 @@ import { json, lerJson, lerBytes, ErroHttp } from '../lib/http.js';
 import { exigirJurado } from '../lib/sessao.js';
 import { sha256Hex } from '../lib/cripto.js';
 import { gerarIdentificadores, mimeBase, EXTENSOES } from '../lib/identificador.js';
-import { auditar } from '../lib/auditoria.js';
 
 export const LIMITES = {
   TRECHO_MAX_BYTES: 1024 * 1024,           // 1 MB por trecho (~10 s de áudio ocupam ~40 KB)
@@ -16,7 +15,6 @@ export const LIMITES = {
 };
 
 const RE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const ator = (c) => c.ator;
 
 function eventoPublico(e) {
   return {
@@ -126,7 +124,6 @@ export async function salvarNota(request, env, { coreografia }) {
   const anterior = await env.DB.prepare('SELECT nota FROM notas WHERE coreografia_id = ?1 AND jurado_id = ?2').bind(c.id, m.id).first();
   if (nota === null || nota === '') {
     await env.DB.prepare('DELETE FROM notas WHERE coreografia_id = ?1 AND jurado_id = ?2').bind(c.id, m.id).run();
-    if (anterior) await auditar(env, request, { eventoId: evento.id, ator: ator(m), acao: 'nota_removida', alvo: c.id, detalhes: { numero: c.numero, anterior: anterior.nota } });
     return json({ ok: true, nota: null });
   }
   const valor = validarNota(nota, evento);
@@ -137,10 +134,6 @@ export async function salvarNota(request, env, { coreografia }) {
   )
     .bind(c.id, m.id, evento.id, valor, agora)
     .run();
-  await auditar(env, request, {
-    eventoId: evento.id, ator: ator(m), acao: anterior ? 'nota_alterada' : 'nota_lancada', alvo: c.id,
-    detalhes: { numero: c.numero, nota: valor, ...(anterior ? { anterior: anterior.nota } : {}) },
-  });
   return json({ ok: true, nota: valor });
 }
 
@@ -158,10 +151,9 @@ export async function finalizarAvaliacao(request, env, { coreografia }) {
   const ja = await env.DB.prepare('SELECT finalizado_em FROM finalizacoes WHERE coreografia_id = ?1 AND jurado_id = ?2').bind(c.id, m.id).first();
   if (ja) return json({ ok: true, finalizado_em: ja.finalizado_em }); // idempotente
 
-  const [nota, chegando, audios] = await env.DB.batch([
+  const [nota, chegando] = await env.DB.batch([
     env.DB.prepare('SELECT nota FROM notas WHERE coreografia_id = ?1 AND jurado_id = ?2').bind(c.id, m.id),
     env.DB.prepare("SELECT COUNT(*) AS n FROM gravacoes WHERE coreografia_id = ?1 AND jurado_id = ?2 AND status <> 'completo'").bind(c.id, m.id),
-    env.DB.prepare("SELECT COUNT(*) AS n FROM gravacoes WHERE coreografia_id = ?1 AND jurado_id = ?2 AND status = 'completo'").bind(c.id, m.id),
   ]);
   if (!nota.results.length) throw new ErroHttp(422, 'Registre a nota antes de finalizar', 'sem_nota');
   if (chegando.results[0].n) throw new ErroHttp(409, 'Ainda há áudio sendo enviado. Aguarde o "✓ enviado" e finalize de novo.', 'audio_em_envio');
@@ -170,10 +162,6 @@ export async function finalizarAvaliacao(request, env, { coreografia }) {
   await env.DB.prepare('INSERT OR IGNORE INTO finalizacoes (coreografia_id, jurado_id, evento_id, finalizado_em) VALUES (?1, ?2, ?3, ?4)')
     .bind(c.id, m.id, evento.id, agora)
     .run();
-  await auditar(env, request, {
-    eventoId: evento.id, ator: ator(m), acao: 'avaliacao_finalizada', alvo: c.id,
-    detalhes: { numero: c.numero, nota: nota.results[0].nota, audios: audios.results[0].n },
-  });
   return json({ ok: true, finalizado_em: agora });
 }
 
@@ -226,10 +214,8 @@ export async function criarGravacao(request, env, { id }) {
 
   // Horário do aparelho (já corrigido pela diferença de relógio). Se absurdo, usa o do servidor.
   let iniciadoEm = Number(corpo.iniciado_em);
-  let relogioSuspeito = false;
   if (!Number.isFinite(iniciadoEm) || iniciadoEm < evento.abre_em - 3600_000 || iniciadoEm > agora + 5 * 60_000) {
     iniciadoEm = agora;
-    relogioSuspeito = true;
   }
 
   // Versão calculada atomicamente: 1 para a primeira, 2+ para regravações
@@ -250,10 +236,6 @@ export async function criarGravacao(request, env, { id }) {
     .bind(interno, publico, id)
     .run();
 
-  await auditar(env, request, {
-    eventoId: evento.id, ator: ator(m), acao: 'gravacao_iniciada', alvo: id,
-    detalhes: { identificador: interno, relogio_suspeito: relogioSuspeito || undefined },
-  });
   return json({ id, versao: inserida.versao, identificador: interno, status: 'gravando' }, 201);
 }
 
@@ -326,10 +308,6 @@ export async function finalizarGravacao(request, env, { id }, ctx) {
     .run();
 
   if (r.meta.changes === 1) {
-    await auditar(env, request, {
-      eventoId: g.evento_id, ator: ator(m), acao: 'gravacao_finalizada', alvo: id,
-      detalhes: { identificador: g.identificador, sha256: sha, tamanho: bytes.byteLength, duracao_ms: duracao },
-    });
     ctx.waitUntil(removerTrechos(env, g)); // arquivo final confirmado: apaga as cópias de segurança
   }
   return json({ ok: true, id, identificador: g.identificador, sha256: sha, status: 'completo' });

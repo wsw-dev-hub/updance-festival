@@ -1,6 +1,6 @@
 // Tela exclusiva do evento — usada pela organização (nível geral) e pelos responsáveis do evento.
 // Abas: Notas (quadro coreografias × jurados, com status dos áudios e média), Ranking (pódio + lista,
-// por formação), Áudios, Coreografias, Grupos/escolas, Jurados (cadastro e escala), Auditoria e Minha conta.
+// por formação), Áudios, Coreografias, Grupos/escolas, Jurados (cadastro e escala) e Minha conta.
 // Os responsáveis do evento são cadastrados na tela "Eventos e responsáveis" (/admin/eventos/).
 
 import {
@@ -11,7 +11,7 @@ import {
 import { montarZip } from './zip.js';
 
 const CHAVE_ABA = 'udx-festival.evento.aba';
-const ABAS = ['notas', 'ranking', 'gravacoes', 'coreografias', 'grupos', 'jurados', 'auditoria', 'conta'];
+const ABAS = ['notas', 'ranking', 'gravacoes', 'jurados', 'grupos', 'coreografias', 'conta'];
 const estado = {
   eu: null,
   eventos: [],
@@ -28,6 +28,8 @@ const estado = {
 };
 const geral = () => estado.eu?.nivel === 'geral';
 const casas = () => estado.quadro?.evento?.nota_casas ?? 1;
+/** ms → dd/mm/aaaa (horário de Brasília) */
+const diaDe = (ms) => new Date(ms).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 const fmtMedia = (m) => fmtNota(m, Math.min(casas() + 1, 3));
 
 /* ================================ NAVEGAÇÃO ================================ */
@@ -39,7 +41,7 @@ function trocarAba(nome) {
   for (const b of document.querySelectorAll('[data-aba]')) b.classList.toggle('is-active', b.dataset.aba === nome);
   for (const s of document.querySelectorAll('.aba')) s.hidden = s.id !== `aba-${nome}`;
   if (nome === 'coreografias' && estado.detalhe) renderizarCoreografias();
-  const carregar = { gravacoes: carregarGravacoes, auditoria: carregarAuditoria }[nome];
+  const carregar = { gravacoes: carregarGravacoes }[nome];
   if (carregar && estado.eventoId) tentar(carregar);
 }
 
@@ -53,7 +55,6 @@ async function abrirEvento(id) {
   clearInterval(estado.timer);
   await Promise.all([carregarDetalhe(), carregarQuadro(), carregarGrupos()]);
   if (estado.aba === 'gravacoes') await carregarGravacoes();
-  if (estado.aba === 'auditoria') await carregarAuditoria();
   // Notas e áudios chegam durante o evento: atualiza sozinho
   estado.timer = setInterval(() => {
     if (document.hidden) return;
@@ -742,7 +743,7 @@ function renderizarCoreografias() {
   $('tb-coreografias').replaceChildren(
     ...(coreografias.length
       ? coreografias.map((c) => {
-          const emUso = c.n_gravacoes || c.n_notas;
+          const emUso = c.n_gravacoes || c.n_notas || c.link_expira_em;
           return el('tr', {},
             el('td', {}, el('span', { class: 'num', textContent: num(c.numero) })),
             el('td', { textContent: c.nome }),
@@ -751,15 +752,16 @@ function renderizarCoreografias() {
             el('td', {}, c.formacao ? rotuloFormacao(c.formacao) : selo('bloqueado', 'definir')),
             el('td', {}, c.faixa ? rotuloFaixa(c.faixa) : selo('bloqueado', 'definir')),
             el('td', { class: 'celula-audios' }, ...audiosDaCoreografia(c)),
+            el('td', {}, c.link_expira_em ? selo('completo', `ativo até ${diaDe(c.link_expira_em)}`) : el('span', { class: 'muted', textContent: '—' })),
             el('td', { class: 'acoes' },
               botao('Editar', 'pencil', () => editarCoreografia(c)),
-              botao('Link de entrega', 'link-plus', () => gerarLink(c)),
-              botao('Revogar links', 'link-off', () => revogarLinks(c), 'btn btn-sec btn-perigo'),
+              botao(c.link_expira_em ? 'Novo link' : 'Gerar link', 'link-plus', () => tentar(() => gerarLink(c))),
+              c.link_expira_em ? botao('Desativar', 'link-off', () => tentar(() => revogarLinks(c)), 'btn btn-sec btn-perigo') : null,
               emUso ? null : botao('Excluir', 'delete-outline', () => excluirCoreografia(c), 'btn btn-sec btn-perigo'),
             ),
           );
         })
-      : [vazio(8, 'Nenhuma coreografia cadastrada.')]),
+      : [vazio(9, 'Nenhuma coreografia cadastrada.')]),
   );
 }
 
@@ -805,16 +807,38 @@ async function excluirCoreografia(c) {
   await Promise.all([carregarDetalhe(), carregarQuadro()]);
 }
 
+/** Link exclusivo da coreografia (notas + áudios) para a escola/grupo. Um novo desativa o anterior. */
 async function gerarLink(c) {
-  const r = await api('POST', `/api/admin/coreografias/${c.id}/link`, { json: { dias: 30 } });
+  if (c.link_expira_em && !confirm(`${num(c.numero)} · ${c.nome} já tem um link ativo (até ${diaDe(c.link_expira_em)}).\n\nGerar um novo? O link anterior deixa de funcionar.`)) return;
+  const r = await api('POST', `/api/admin/coreografias/${c.id}/link`, { json: { dias: Number($('links-dias').value) || 30 } });
   const ok = await copiar(r.url);
-  prompt(`Link de ${num(c.numero)} · ${c.nome}${ok ? ' (copiado)' : ''}. Válido até ${fmtHora(r.expira_em)}:`, r.url);
+  prompt(`Link exclusivo de ${num(c.numero)} · ${c.nome}${ok ? ' (copiado)' : ''}. Válido até ${fmtHora(r.expira_em)}:`, r.url);
+  await carregarDetalhe();
 }
 
 async function revogarLinks(c) {
-  if (!confirm(`Revogar todos os links de entrega de ${c.nome}?`)) return;
-  const r = await api('POST', `/api/admin/coreografias/${c.id}/revogar-links`);
-  aviso(`${r.revogados} link(s) revogado(s).`);
+  if (!confirm(`Desativar o link de ${num(c.numero)} · ${c.nome}? Quem tiver o link não conseguirá mais abrir.`)) return;
+  await api('POST', `/api/admin/coreografias/${c.id}/revogar-links`);
+  aviso(`Link de ${num(c.numero)} desativado.`);
+  await carregarDetalhe();
+}
+
+/** Gera os links de todas as coreografias (ou só das que não têm link ativo) e baixa a planilha para enviar às escolas. */
+async function gerarLinksDoEvento() {
+  const soNovos = $('links-so-novos').checked;
+  const dias = Number($('links-dias').value) || 30;
+  const alvo = estado.detalhe.coreografias.filter((c) => !soNovos || !c.link_expira_em).length;
+  if (!alvo) return aviso('Todas as coreografias já têm link ativo. Desmarque "Só coreografias ainda sem link ativo" para gerar links novos para todas.');
+  const trocar = estado.detalhe.coreografias.filter((c) => c.link_expira_em).length;
+  if (!confirm(`Gerar ${alvo} link(s) válido(s) por ${dias} dias?${!soNovos && trocar ? `\n\n${trocar} coreografia(s) já têm link: o link anterior delas deixa de funcionar.` : ''}`)) return;
+  const r = await api('POST', `/api/admin/eventos/${estado.eventoId}/links`, { json: { dias, somente_sem_link: soNovos } });
+  const ev = estado.detalhe.evento;
+  baixarCsv(`links-grupos_${ev.data}_${ev.nome}.csv`.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-z0-9._-]+/g, '-'), [
+    ['numero', 'coreografia', 'grupo', 'responsavel_do_grupo', 'email', 'telefone', 'link', 'valido_ate'],
+    ...r.links.map((l) => [num(l.numero), l.coreografia, l.grupo || '', l.grupo_responsavel || '', l.grupo_email || '', l.grupo_telefone || '', l.url, diaDe(l.expira_em)]),
+  ]);
+  aviso(`${r.links.length} link(s) gerado(s). A planilha foi baixada: envie a cada escola/grupo o link da sua coreografia.`);
+  await carregarDetalhe();
 }
 
 /* ================================ JURADOS (ESCALA) ================================ */
@@ -884,25 +908,6 @@ async function novaSenhaJurado(j) {
   await carregarDetalhe();
 }
 
-/* ================================ AUDITORIA ================================ */
-
-async function carregarAuditoria() {
-  const linhas = await api('GET', `/api/admin/auditoria?evento=${encodeURIComponent(estado.eventoId)}`);
-  $('tb-auditoria').replaceChildren(
-    ...(linhas.length
-      ? linhas.map((l) =>
-          el('tr', {},
-            el('td', { textContent: fmtHora(l.criado_em) }),
-            el('td', { class: 'ident', textContent: l.ator }),
-            el('td', { textContent: l.acao }),
-            el('td', { class: 'ident', textContent: l.alvo || '' }),
-            el('td', { class: 'ident', textContent: l.detalhes || '' }),
-          ),
-        )
-      : [vazio(5, 'Nenhum registro.')]),
-  );
-}
-
 /* ================================ INÍCIO ================================ */
 
 async function carregarListaEventos() {
@@ -936,6 +941,7 @@ async function iniciar() {
   for (const ev of ['play', 'pause', 'ended']) $('player').addEventListener(ev, rerenderizarListasDeAudio);
   $('btn-fechar-player').addEventListener('click', fecharPlayer);
   $('form-coreografia').addEventListener('submit', (e) => tentar(() => salvarCoreografia(e)));
+  $('btn-gerar-links').addEventListener('click', () => tentar(gerarLinksDoEvento));
   $('btn-importar').addEventListener('click', () => tentar(importarCsv));
   $('form-escala').addEventListener('submit', (e) => tentar(() => escalar(e)));
   $('form-grupo').addEventListener('submit', (e) => tentar(() => salvarGrupo(e)));

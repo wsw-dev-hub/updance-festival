@@ -99,10 +99,9 @@
     <button class="tab is-active" data-aba="notas" role="tab"><i class="mdi mdi-table-star"></i> Notas</button>
     <button class="tab" data-aba="ranking" role="tab"><i class="mdi mdi-trophy-outline"></i> Ranking</button>
     <button class="tab" data-aba="gravacoes" role="tab"><i class="mdi mdi-waveform"></i> Áudios <span id="c-gravacoes" class="contador"></span></button>
-    <button class="tab" data-aba="coreografias" role="tab"><i class="mdi mdi-human-female-dance"></i> Coreografias <span id="c-coreografias" class="contador"></span></button>
-    <button class="tab" data-aba="grupos" role="tab"><i class="mdi mdi-account-group"></i> Grupos <span id="c-grupos" class="contador"></span></button>
     <button class="tab" data-aba="jurados" role="tab"><i class="mdi mdi-gavel"></i> Jurados <span id="c-jurados" class="contador"></span></button>
-    <button class="tab" data-aba="auditoria" role="tab"><i class="mdi mdi-history"></i> Auditoria</button>
+    <button class="tab" data-aba="grupos" role="tab"><i class="mdi mdi-account-group"></i> Grupos <span id="c-grupos" class="contador"></span></button>
+    <button class="tab" data-aba="coreografias" role="tab"><i class="mdi mdi-human-female-dance"></i> Coreografias <span id="c-coreografias" class="contador"></span></button>
     <button class="tab" data-aba="conta" role="tab"><i class="mdi mdi-account-cog"></i> Minha conta</button>
   </nav>
 
@@ -208,8 +207,19 @@
         <button id="btn-importar" class="btn btn-hot" type="button">Importar</button>
       </div>
     </details>
+    <details class="bloco-links">
+      <summary><i class="mdi mdi-link-variant"></i> Links exclusivos para as escolas/grupos</summary>
+      <p class="muted">Cada coreografia tem um link próprio com as <strong>notas</strong> e os <strong>comentários em áudio</strong> dos jurados. Cada jurado aparece no link depois que finaliza a avaliação, e a nota final (média) aparece quando todos concluem. Gerar um link novo desativa o anterior daquela coreografia.</p>
+      <div class="linha">
+        <label class="filtro-rotulado">Validade
+          <select id="links-dias"><option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="90">90 dias</option><option value="180">180 dias</option></select></label>
+        <label class="check"><input id="links-so-novos" type="checkbox" checked> Só coreografias ainda sem link ativo</label>
+        <button id="btn-gerar-links" class="btn btn-hot" type="button"><i class="mdi mdi-file-delimited-outline"></i> Gerar links e baixar planilha</button>
+      </div>
+      <p class="muted">A planilha (CSV) traz nº, coreografia, grupo, responsável, e-mail, telefone e o link de cada uma, para enviar às escolas. Os links só aparecem nesse momento: guarde a planilha.</p>
+    </details>
     <div class="tabela-rolagem"><table>
-      <thead><tr><th>Nº</th><th>Nome</th><th>Grupo</th><th>Categoria</th><th>Formação</th><th>Faixa</th><th>Áudios dos jurados</th><th>Ações</th></tr></thead>
+      <thead><tr><th>Nº</th><th>Nome</th><th>Grupo</th><th>Categoria</th><th>Formação</th><th>Faixa</th><th>Áudios dos jurados</th><th>Link do grupo</th><th>Ações</th></tr></thead>
       <tbody id="tb-coreografias"></tbody>
     </table></div>
   </section>
@@ -256,15 +266,6 @@
     <div class="tabela-rolagem"><table>
       <thead><tr><th>Grupo</th><th>Equipe</th><th>Integrantes</th><th>Contato</th><th>Coreografias</th><th>Ações</th></tr></thead>
       <tbody id="tb-grupos"></tbody>
-    </table></div>
-  </section>
-
-  <!-- ============================ AUDITORIA ============================ -->
-  <section id="aba-auditoria" class="card aba" hidden>
-    <div class="card-head"><h2>Auditoria do evento</h2></div>
-    <div class="tabela-rolagem"><table>
-      <thead><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Alvo</th><th>Detalhes</th></tr></thead>
-      <tbody id="tb-auditoria"></tbody>
     </table></div>
   </section>
 

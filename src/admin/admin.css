@@ -351,3 +351,8 @@ fieldset.bloco-responsaveis p { margin: 0; }
 @media (max-width: 640px) {
   .filtro-rotulado { flex: 1 1 100%; }
 }
+
+/* Links exclusivos para as escolas/grupos (aba Coreografias) */
+.bloco-links { margin-top: 10px; }
+.bloco-links > .linha { align-items: end; flex-wrap: wrap; gap: 10px; }
+.bloco-links .check { align-self: center; }

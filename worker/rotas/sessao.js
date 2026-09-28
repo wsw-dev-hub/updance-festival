@@ -17,7 +17,6 @@
 
 import { json, lerJson, ErroHttp, ipDe } from '../lib/http.js';
 import { aleatorio, randomToken, sha256Hex, timingSafeEqual } from '../lib/cripto.js';
-import { auditar } from '../lib/auditoria.js';
 import { gerarHash, conferir, validarSenhaNova } from '../lib/senha.js';
 import { enviarEmail, emailReset } from '../lib/email.js';
 import { PAPEIS, autenticar, criarSessao, encerrarSessao, exigirConta } from '../lib/sessao.js';
@@ -41,16 +40,7 @@ function login(papel) {
   return async (request, env) => {
     const b = await corpo(request);
     const email = emailDe(b);
-    let conta;
-    try {
-      conta = await autenticar(env, papel, email, b.password);
-    } catch (err) {
-      if (err.codigo === 'login_invalido' || err.codigo === 'bloqueado') {
-        await auditar(env, request, { ator: 'publico', acao: `login_${papel}_falhou`, alvo: email.slice(0, 254) || null });
-      }
-      throw err;
-    }
-    await auditar(env, request, { ator: `${papel}:${conta.email}`, acao: `login_${papel}` });
+    const conta = await autenticar(env, papel, email, b.password);
     return json(
       { ok: true, nome: conta.nome, email: conta.email, trocar_senha: !!conta.trocar_senha },
       200,
@@ -93,7 +83,6 @@ function trocarSenha(papel) {
       .run();
     const atualizada = await env.DB.prepare(`SELECT id, email, sessao_versao FROM ${tabela} WHERE id = ?1`).bind(c.id).first();
     await encerrarSessao(request, env, papel); // a sessão antiga some do KV…
-    await auditar(env, request, { ator: c.ator, acao: 'senha_trocada' });
     // …e esta aba recebe uma nova; as sessões em outros aparelhos caem (versão nova).
     return json({ ok: true }, 200, { 'Set-Cookie': await criarSessao(request, env, papel, atualizada) });
   };
@@ -112,7 +101,6 @@ async function memberForgot(request, env) {
 
   const j = await env.DB.prepare('SELECT id, nome, email FROM jurados WHERE email = ?1 AND ativo = 1').bind(email).first();
   if (!j) {
-    await auditar(env, request, { ator: 'publico', acao: 'reset_ignorado', alvo: email });
     return generica;
   }
   const token = randomToken(32);
@@ -121,7 +109,7 @@ async function memberForgot(request, env) {
     .run();
   const link = `${new URL(request.url).origin}/reset-senha/?token=${token}`;
   const r = await enviarEmail(env, j.email, 'Redefinir sua senha — UpDance Festival', emailReset(link, j.nome));
-  await auditar(env, request, { ator: 'publico', acao: r.ok ? 'reset_enviado' : 'reset_erro', alvo: j.email, detalhes: r.error ? { erro: r.error } : null });
+  if (!r.ok) console.error('esqueci a senha: falha ao enviar o e-mail', r.error); // aparece em Workers → Logs
   return generica;
 }
 
@@ -144,7 +132,6 @@ async function memberReset(request, env) {
   )
     .bind(h.senha_hash, h.senha_sal, h.senha_iter, j.id)
     .run();
-  await auditar(env, request, { ator: `jurado:${j.email}`, acao: 'reset_concluido' });
   return json({ ok: true });
 }
 
@@ -164,7 +151,6 @@ async function adminSetup(request, env) {
   const b = await corpo(request);
   if (!env.ADMIN_SETUP_KEY || !timingSafeEqual(String(b.setup_key || ''), env.ADMIN_SETUP_KEY)) {
     await env.KV.put(chaveFalhas, String(falhas + 1), { expirationTtl: SETUP_JANELA });
-    await auditar(env, request, { ator: 'publico', acao: 'admin_setup_negado' });
     throw new ErroHttp(403, 'Chave de setup inválida.', 'setup_negado');
   }
   const email = emailDe(b);
@@ -192,7 +178,6 @@ async function adminSetup(request, env) {
       .run();
   }
   await env.KV.delete(chaveFalhas);
-  await auditar(env, request, { ator: 'setup', acao: existe ? 'admin_setup_redefinido' : 'admin_setup_criado', alvo: email });
   return json({ ok: true, criado: !existe });
 }
 
