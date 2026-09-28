@@ -5,7 +5,7 @@
 
 import {
   $, num, api, aviso, tentar, el, icone, botao, selo, vazio, fmtDuracao, fmtHora, fmtData, paraCampo, comFuso, fmtNota,
-  FORMACOES, rotuloFormacao, situacaoEvento, situacaoConta, copiar, mostrarSenha, ligarCaixaSenha, guardar, ler,
+  FORMACOES, rotuloFormacao, FAIXAS, rotuloFaixa, situacaoEvento, situacaoConta, copiar, mostrarSenha, ligarCaixaSenha, guardar, ler,
   trocarMinhaSenha, sair, baixarCsv,
 } from './comum.js';
 import { montarZip } from './zip.js';
@@ -157,6 +157,20 @@ function montarFiltroFormacao() {
     tem.has('') ? el('option', { value: '', textContent: 'Sem formação' }) : null,
   );
   sel.value = [...sel.options].some((o) => o.value === atual) ? atual : '*';
+  montarFiltroFaixa($('filtro-faixa-notas'), estado.quadro.coreografias);
+}
+
+/** Select de faixa só com as faixas que existem na lista (some quando nenhuma coreografia tem faixa). */
+function montarFiltroFaixa(sel, lista) {
+  const atual = sel.value;
+  const tem = new Set(lista.map((c) => c.faixa || ''));
+  sel.replaceChildren(
+    el('option', { value: '*', textContent: 'Todas as faixas' }),
+    ...FAIXAS.filter((f) => tem.has(f.id)).map((f) => el('option', { value: f.id, textContent: f.rotulo })),
+    tem.has('') ? el('option', { value: '', textContent: 'Sem faixa' }) : null,
+  );
+  sel.value = [...sel.options].some((o) => o.value === atual) ? atual : '*';
+  sel.hidden = !FAIXAS.some((f) => tem.has(f.id));
 }
 
 const STATUS_AUDIO = {
@@ -234,9 +248,11 @@ function rerenderizarListasDeAudio() {
 
 function filtrarNotas(lista) {
   const f = $('filtro-formacao-notas').value;
+  const fx = $('filtro-faixa-notas').value;
   const q = $('busca-notas').value.trim().toLowerCase();
   return lista.filter((c) => {
     if (f !== '*' && (c.formacao || '') !== f) return false;
+    if (fx !== '*' && (c.faixa || '') !== fx) return false;
     if (!q) return true;
     return `${num(c.numero)} ${c.nome} ${c.grupo || ''} ${c.categoria || ''}`.toLowerCase().includes(q);
   });
@@ -271,7 +287,7 @@ function renderizarNotas() {
             el('td', { class: 'col-fixa' }, el('span', { class: 'num', textContent: num(c.numero) })),
             el('td', { class: 'col-fixa2' },
               el('div', { class: 'coreo-nome', textContent: c.nome }),
-              el('div', { class: 'muted', textContent: [c.grupo, rotuloFormacao(c.formacao), c.categoria].filter(Boolean).join(' · ') }),
+              el('div', { class: 'muted', textContent: [c.grupo, rotuloFormacao(c.formacao), rotuloFaixa(c.faixa), c.categoria].filter(Boolean).join(' · ') }),
             ),
             ...jurados.map((j) =>
               el('td', { class: `celula-nota${j.ativo ? '' : ' suspenso'}` },
@@ -327,12 +343,15 @@ function renderizarRanking() {
     ...segs.map((s) =>
       el('button', {
         class: `tab${s.id === estado.segmento ? ' is-active' : ''}`, type: 'button', role: 'tab', disabled: !s.total,
-        onclick: () => { estado.segmento = s.id; $('filtro-categoria').value = '*'; renderizarRanking(); },
+        onclick: () => { estado.segmento = s.id; $('filtro-categoria').value = '*'; $('filtro-faixa').value = '*'; renderizarRanking(); },
       }, s.rotulo, el('span', { class: 'contador', textContent: ` ${s.total}` })),
     ),
   );
 
-  const doSegmento = estado.quadro.coreografias.filter((c) => (c.formacao || '') === estado.segmento);
+  const daFormacao = estado.quadro.coreografias.filter((c) => (c.formacao || '') === estado.segmento);
+  montarFiltroFaixa($('filtro-faixa'), daFormacao);
+  const fx = $('filtro-faixa').value;
+  const doSegmento = daFormacao.filter((c) => fx === '*' || (c.faixa || '') === fx);
   const cats = [...new Set(doSegmento.map((c) => c.categoria).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
   const sel = $('filtro-categoria');
   const atual = sel.value;
@@ -355,7 +374,7 @@ function renderizarRanking() {
             el('div', { class: 'podio-posicao' }, el('span', { textContent: `${c.posicao}º` }), c.empate ? el('small', { textContent: 'empate' }) : null),
             el('div', { class: 'podio-media', textContent: fmtMedia(c.media) }),
             el('div', { class: 'podio-nome' }, el('span', { class: 'num', textContent: num(c.numero) }), ` ${c.nome}`),
-            el('div', { class: 'muted', textContent: [c.grupo, c.categoria].filter(Boolean).join(' · ') || rotuloFormacao(c.formacao) }),
+            el('div', { class: 'muted', textContent: [c.grupo, rotuloFaixa(c.faixa), c.categoria].filter(Boolean).join(' · ') || rotuloFormacao(c.formacao) }),
             c.qtd_notas < ativos ? selo('gravando', `parcial · ${c.qtd_notas}/${ativos} notas`) : selo('completo', `${c.qtd_notas}/${ativos} notas`),
           ),
         )
@@ -371,13 +390,14 @@ function renderizarRanking() {
             el('td', { textContent: c.nome }),
             el('td', { textContent: c.grupo || '—' }),
             el('td', { textContent: c.categoria || '—' }),
+            el('td', { textContent: rotuloFaixa(c.faixa) || '—' }),
             el('td', {}, el('strong', { class: 'media-valor', textContent: fmtMedia(c.media) })),
             el('td', {}, c.posicao
               ? (c.qtd_notas < ativos ? selo('gravando', `${c.qtd_notas}/${ativos} parcial`) : selo('completo', `${c.qtd_notas}/${ativos}`))
               : selo('provisoria', 'sem notas')),
           ),
         )
-      : [vazio(7, 'Nenhuma coreografia nesta formação.')]),
+      : [vazio(8, 'Nenhuma coreografia com estes filtros.')]),
   );
 }
 
@@ -385,12 +405,13 @@ function exportarRanking() {
   const lista = estado.rankingAtual || [];
   const seg = segmentosDisponiveis().find((s) => s.id === estado.segmento)?.rotulo || 'ranking';
   const cat = $('filtro-categoria').value;
+  const fx = $('filtro-faixa').value;
   const ev = estado.quadro.evento;
   const jurados = estado.quadro.jurados.filter((j) => j.ativo);
-  baixarCsv(`ranking_${ev.data}_${seg}${cat !== '*' ? `_${cat}` : ''}.csv`.toLowerCase().replace(/[^a-z0-9._-]+/g, '-'), [
-    ['posicao', 'numero', 'coreografia', 'grupo', 'categoria', 'formacao', 'media', 'notas_lancadas', ...jurados.map((j) => `J${j.ordem} ${j.nome}`)],
+  baixarCsv(`ranking_${ev.data}_${seg}${fx !== '*' ? `_${rotuloFaixa(fx) || 'sem-faixa'}` : ''}${cat !== '*' ? `_${cat}` : ''}.csv`.toLowerCase().replace(/[^a-z0-9._-]+/g, '-'), [
+    ['posicao', 'numero', 'coreografia', 'grupo', 'categoria', 'formacao', 'faixa', 'media', 'notas_lancadas', ...jurados.map((j) => `J${j.ordem} ${j.nome}`)],
     ...lista.map((c) => [
-      c.posicao ?? '', c.numero, c.nome, c.grupo || '', c.categoria || '', rotuloFormacao(c.formacao),
+      c.posicao ?? '', c.numero, c.nome, c.grupo || '', c.categoria || '', rotuloFormacao(c.formacao), rotuloFaixa(c.faixa),
       c.media == null ? '' : fmtMedia(c.media), c.qtd_notas, ...jurados.map((j) => (c.notas[j.id] == null ? '' : fmtNota(c.notas[j.id], casas()))),
     ]),
   ]);
@@ -671,6 +692,7 @@ function renderizarCoreografias() {
             el('td', { textContent: c.grupo || '—' }),
             el('td', { textContent: c.categoria || '—' }),
             el('td', {}, c.formacao ? rotuloFormacao(c.formacao) : selo('bloqueado', 'definir')),
+            el('td', {}, c.faixa ? rotuloFaixa(c.faixa) : selo('bloqueado', 'definir')),
             el('td', { class: 'celula-audios' }, ...audiosDaCoreografia(c)),
             el('td', { class: 'acoes' },
               botao('Editar', 'pencil', () => editarCoreografia(c)),
@@ -680,7 +702,7 @@ function renderizarCoreografias() {
             ),
           );
         })
-      : [vazio(7, 'Nenhuma coreografia cadastrada.')]),
+      : [vazio(8, 'Nenhuma coreografia cadastrada.')]),
   );
 }
 
@@ -691,6 +713,7 @@ function editarCoreografia(c) {
   f.grupo_id.value = c.grupo_id || '';
   f.categoria.value = c.categoria || '';
   f.formacao.value = c.formacao || '';
+  f.faixa.value = c.faixa || '';
   f.scrollIntoView({ behavior: 'smooth', block: 'center' });
   f.nome.focus();
 }
@@ -699,7 +722,7 @@ async function salvarCoreografia(e) {
   e.preventDefault();
   const f = new FormData(e.target);
   await api('POST', `/api/admin/eventos/${estado.eventoId}/coreografias`, {
-    json: { numero: f.get('numero'), nome: f.get('nome'), grupo_id: f.get('grupo_id') || null, categoria: f.get('categoria'), formacao: f.get('formacao') || null },
+    json: { numero: f.get('numero'), nome: f.get('nome'), grupo_id: f.get('grupo_id') || null, categoria: f.get('categoria'), formacao: f.get('formacao') || null, faixa: f.get('faixa') || null },
   });
   aviso(`Coreografia ${num(f.get('numero'))} salva.`);
   e.target.reset();
@@ -712,7 +735,7 @@ async function importarCsv() {
   if (arquivo) texto = await arquivo.text();
   if (!texto) return aviso('Cole o CSV ou escolha um arquivo.', true);
   const r = await api('POST', `/api/admin/eventos/${estado.eventoId}/coreografias`, { texto });
-  aviso(`${r.importadas} coreografia(s) importada(s) · ${r.grupos} grupo(s)${r.sem_formacao ? ` · ${r.sem_formacao} sem formação (defina para entrar no ranking certo)` : ''}.`);
+  aviso(`${r.importadas} coreografia(s) importada(s) · ${r.grupos} grupo(s)${r.sem_formacao ? ` · ${r.sem_formacao} sem formação (defina para entrar no ranking certo)` : ''}${r.sem_faixa ? ` · ${r.sem_faixa} sem faixa` : ''}.`);
   $('csv').value = '';
   $('arquivo-csv').value = '';
   await Promise.all([carregarDetalhe(), carregarQuadro(), carregarGrupos()]);
@@ -843,6 +866,8 @@ async function iniciar() {
   $('filtro-formacao-notas').addEventListener('change', renderizarNotas);
   $('busca-notas').addEventListener('input', renderizarNotas);
   $('filtro-categoria').addEventListener('change', renderizarRanking);
+  $('filtro-faixa').addEventListener('change', () => { $('filtro-categoria').value = '*'; renderizarRanking(); });
+  $('filtro-faixa-notas').addEventListener('change', renderizarNotas);
   $('btn-exportar-ranking').addEventListener('click', exportarRanking);
   $('busca-audios').addEventListener('input', renderizarGravacoes);
   $('filtro-jurado-audios').addEventListener('change', renderizarGravacoes);

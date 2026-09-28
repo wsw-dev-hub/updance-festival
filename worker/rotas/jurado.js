@@ -66,7 +66,7 @@ export async function sessao(request, env) {
 
   const [coreografias, gravacoes, notas] = await env.DB.batch([
     env.DB.prepare(
-      `SELECT c.id, c.numero, c.nome, g.nome AS grupo, c.categoria, c.formacao
+      `SELECT c.id, c.numero, c.nome, g.nome AS grupo, c.categoria, c.formacao, c.faixa
          FROM coreografias c LEFT JOIN grupos g ON g.id = c.grupo_id
         WHERE c.evento_id = ?1 ORDER BY c.numero`,
     ).bind(sel.id),

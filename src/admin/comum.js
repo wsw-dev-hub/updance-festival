@@ -89,6 +89,16 @@ export const FORMACOES = [
 ];
 export const rotuloFormacao = (f) => FORMACOES.find((x) => x.id === f)?.um || 'Sem formação';
 
+/** Faixa da coreografia (idade/nível). */
+export const FAIXAS = [
+  { id: 'baby', rotulo: 'Baby' },
+  { id: 'infantil', rotulo: 'Infantil' },
+  { id: 'juvenil', rotulo: 'Juvenil' },
+  { id: 'adulto', rotulo: 'Adulto' },
+  { id: 'profissional', rotulo: 'Profissional' },
+];
+export const rotuloFaixa = (f) => FAIXAS.find((x) => x.id === f)?.rotulo || '';
+
 /** Situação do evento pelo horário. */
 export function situacaoEvento(e, agora = Date.now()) {
   if (agora < e.abre_em) return { classe: 'provisoria', texto: 'Em breve' };

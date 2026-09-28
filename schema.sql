@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS coreografias (
   grupo_id   TEXT REFERENCES grupos(id),
   categoria  TEXT,
   formacao   TEXT CHECK (formacao IN ('solo', 'duo', 'trio', 'grupo')),
+  faixa      TEXT CHECK (faixa IN ('baby', 'infantil', 'juvenil', 'adulto', 'profissional')),
   UNIQUE (evento_id, numero)
 );
 CREATE INDEX IF NOT EXISTS idx_coreografias_grupo ON coreografias(grupo_id);

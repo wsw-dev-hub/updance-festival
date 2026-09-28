@@ -121,6 +121,7 @@
     </div>
     <div class="linha filtros">
       <select id="filtro-formacao-notas" aria-label="Formação"></select>
+      <select id="filtro-faixa-notas" aria-label="Faixa"></select>
       <input id="busca-notas" type="search" placeholder="Buscar nº, coreografia ou grupo" aria-label="Buscar">
     </div>
     <p class="legenda" aria-label="Legenda dos áudios">
@@ -144,12 +145,13 @@
     </div>
     <nav class="tabs segmentos" id="segmentos" role="tablist" aria-label="Formação"></nav>
     <div class="linha filtros">
+      <select id="filtro-faixa" aria-label="Faixa"></select>
       <select id="filtro-categoria" aria-label="Categoria"></select>
       <span id="resumo-ranking" class="muted"></span>
     </div>
     <div id="podio" class="podio" aria-label="Três maiores médias"></div>
     <div class="tabela-rolagem"><table>
-      <thead><tr><th>Posição</th><th>Nº</th><th>Coreografia</th><th>Grupo</th><th>Categoria</th><th>Média</th><th>Notas</th></tr></thead>
+      <thead><tr><th>Posição</th><th>Nº</th><th>Coreografia</th><th>Grupo</th><th>Categoria</th><th>Faixa</th><th>Média</th><th>Notas</th></tr></thead>
       <tbody id="tb-ranking"></tbody>
     </table></div>
     <p class="muted">Empates na média dividem a mesma posição. "Parcial" = ainda faltam notas de jurados ativos.</p>
@@ -189,20 +191,22 @@
       <label>Categoria <input name="categoria" maxlength="100" placeholder="Jazz, Contemporâneo…"></label>
       <label>Formação
         <select name="formacao"><option value="">Escolha…</option><option value="solo">Solo</option><option value="duo">Duo</option><option value="trio">Trio</option><option value="grupo">Grupo</option></select></label>
+      <label>Faixa
+        <select name="faixa"><option value="">Escolha…</option><option value="baby">Baby</option><option value="infantil">Infantil</option><option value="juvenil">Juvenil</option><option value="adulto">Adulto</option><option value="profissional">Profissional</option></select></label>
       <button type="submit" class="btn btn-hot"><i class="mdi mdi-content-save-outline"></i> Salvar</button>
     </form>
     <p class="muted">Mesmo número = atualiza a coreografia existente.</p>
     <details>
       <summary><i class="mdi mdi-file-upload-outline"></i> Importar CSV</summary>
-      <p class="muted">Colunas: <code>numero;nome;grupo;categoria;formacao</code> (formação: solo, duo, trio ou grupo — ou use a coluna <code>integrantes</code> com o número de bailarinos). Grupos que ainda não existem são criados.</p>
-      <textarea id="csv" rows="5" placeholder="numero;nome;grupo;categoria;formacao&#10;1;Bolero de Ravel;Cia. Movimento;Contemporâneo;grupo&#10;2;Solo em Vermelho;Ana Lima;Jazz;solo"></textarea>
+      <p class="muted">Colunas: <code>numero;nome;grupo;categoria;formacao;faixa</code> (formação: solo, duo, trio ou grupo — ou use a coluna <code>integrantes</code> com o número de bailarinos; faixa: baby, infantil, juvenil, adulto ou profissional). Grupos que ainda não existem são criados.</p>
+      <textarea id="csv" rows="5" placeholder="numero;nome;grupo;categoria;formacao;faixa&#10;1;Bolero de Ravel;Cia. Movimento;Contemporâneo;grupo;adulto&#10;2;Solo em Vermelho;Ana Lima;Jazz;solo;juvenil"></textarea>
       <div class="linha">
         <input id="arquivo-csv" type="file" accept=".csv,text/csv">
         <button id="btn-importar" class="btn btn-hot" type="button">Importar</button>
       </div>
     </details>
     <div class="tabela-rolagem"><table>
-      <thead><tr><th>Nº</th><th>Nome</th><th>Grupo</th><th>Categoria</th><th>Formação</th><th>Áudios dos jurados</th><th>Ações</th></tr></thead>
+      <thead><tr><th>Nº</th><th>Nome</th><th>Grupo</th><th>Categoria</th><th>Formação</th><th>Faixa</th><th>Áudios dos jurados</th><th>Ações</th></tr></thead>
       <tbody id="tb-coreografias"></tbody>
     </table></div>
   </section>

@@ -5,7 +5,7 @@ Sistema para jurados de festivais gravarem comentários em áudio (gravar / paus
 Projeto único:
 - **Vite** gera as páginas em `dist/`;
 - **`wrangler.toml`** publica o Worker (`worker/index.js`) com esses arquivos;
-- **`schema.sql`** tem o banco inteiro, em um arquivo só, sem migrações. Para um banco que já existia, há os arquivos de atualização `atualizacao-notas-ranking.sql`, `atualizacao-grupos-equipe.sql` e `atualizacao-grupos-por-evento.sql` (veja o passo 4).
+- **`schema.sql`** tem o banco inteiro, em um arquivo só, sem migrações. Para um banco que já existia, há os arquivos de atualização `atualizacao-notas-ranking.sql`, `atualizacao-grupos-equipe.sql`, `atualizacao-grupos-por-evento.sql` e `atualizacao-faixa-coreografias.sql` (veja o passo 4).
 
 ## Telas
 
@@ -51,6 +51,11 @@ Em cada campo vai um nome por linha. Também dá para separar os nomes com `;` o
   - O ZIP é montado no navegador, sem compressão, porque áudio já vem comprimido. Assim o Worker não estoura o limite de CPU do plano gratuito.
   - Até 400 MB por ZIP; acima disso, filtre e baixe em partes.
 - **Formato:** o arquivo vem no formato gravado pelo aparelho, WebM (Android/Chrome) ou MP4 (iPhone). Se algum navegador não tocar um formato, o **Baixar** funciona sempre, e o arquivo abre no VLC ou em qualquer player atual.
+
+**Faixa da coreografia:** **Baby, Infantil, Juvenil, Adulto** ou **Profissional**.
+- No cadastro (aba **Coreografias** da tela do evento) ou no CSV, na coluna `faixa` (também aceita o cabeçalho `Faixa etária`).
+- Aceita variações sem acento/caixa: "Baby class", "bebê", "kids", "jovem", "teen", "adultos", "sênior", "pro"…
+- Aparece na lista de coreografias, no quadro de notas (com filtro), no **ranking** (filtro de faixa dentro de cada formação: por exemplo, "Grupos · Adulto") e no CSV exportado. O app do jurado mostra a faixa junto do grupo.
 
 **Formação da coreografia** (segmenta o ranking):
 - `solo`, `duo`, `trio` ou `grupo`, informada no cadastro ou no CSV (coluna `formacao`).
@@ -139,8 +144,9 @@ O resultado deve ter **12 tabelas**: `admins, auditoria, coreografias, evento_ju
 > **Depois**, execute também, uma vez cada, na ordem:
 > 1. **`atualizacao-grupos-equipe.sql`**: acrescenta ao `grupos` as colunas `integrantes`, `coreografo`, `diretores` e `coordenadores`.
 > 2. **`atualizacao-grupos-por-evento.sql`**: liga cada grupo ao seu evento (coluna `evento_id`). Grupo usado em mais de um evento ganha uma cópia por evento, com a mesma equipe; grupo sem coreografia fica "sem evento" (aparece no painel de controle para excluir). Nenhuma coreografia, nota ou áudio é apagado. A consulta do fim mostra quantos grupos ficaram em cada evento.
+> 3. **`atualizacao-faixa-coreografias.sql`**: acrescenta a coluna `faixa` às coreografias (as existentes ficam "sem faixa" até alguém definir).
 >
-> Resumo da ordem para um banco antigo: `atualizacao-notas-ranking.sql` → `atualizacao-grupos-equipe.sql` → `atualizacao-grupos-por-evento.sql`. Pule os que já executou. Banco criado com o `schema.sql` desta versão já tem tudo e não precisa de nenhum arquivo de atualização.
+> Resumo da ordem para um banco antigo: `atualizacao-notas-ranking.sql` → `atualizacao-grupos-equipe.sql` → `atualizacao-grupos-por-evento.sql` → `atualizacao-faixa-coreografias.sql`. Pule os que já executou. Banco criado com o `schema.sql` desta versão já tem tudo e não precisa de nenhum arquivo de atualização.
 
 > **Se o banco já tinha tabelas de uma versão anterior deste projeto,** confira com a consulta abaixo:
 >
@@ -196,7 +202,7 @@ Não cadastre variáveis de texto (**Text**) pelo painel. As variáveis do `[var
 5. Envie a cada responsável esse endereço, o e-mail e a senha provisória. No 1º acesso, ele cria a própria senha e cai na tela **Eventos e responsáveis**, só com os eventos dele.
 6. O responsável (ou você) clica em **Abrir tela do evento** e faz, nesta ordem:
    1. **Grupos:** cadastra cada grupo/escola com cidade, contato, integrantes, coreógrafo(a)/professor(a), diretores e coordenadores. (Grupos que faltarem também são criados pelo CSV do passo seguinte.)
-   2. **Coreografias:** importa o CSV `numero;nome;grupo;categoria;formacao` ou cadastra uma a uma.
+   2. **Coreografias:** importa o CSV `numero;nome;grupo;categoria;formacao;faixa` ou cadastra uma a uma.
    3. **Jurados:** informa nome, e-mail e telefone de cada um. Quem não tem conta recebe uma senha provisória, que aparece uma única vez.
 7. Envie a cada jurado o **link do app** (botão **Link dos jurados**) e a senha provisória. No 1º acesso, ele cria a própria senha.
 8. Durante o evento, a aba **Notas** atualiza sozinha a cada 15 s. O **Ranking** mostra o pódio de cada formação e exporta CSV.
@@ -278,5 +284,6 @@ schema.sql      banco completo (arquivo único)
 atualizacao-notas-ranking.sql   bancos criados antes das notas/ranking (executar 1º)
 atualizacao-grupos-equipe.sql   bancos criados antes da equipe dos grupos (executar 2º)
 atualizacao-grupos-por-evento.sql   bancos criados antes dos grupos por evento (executar 3º)
+atualizacao-faixa-coreografias.sql  bancos criados antes da faixa das coreografias (executar 4º)
 vite.config.js · wrangler.toml · package.json
 ```

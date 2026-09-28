@@ -65,6 +65,23 @@ export function formacaoDe(valor, integrantes) {
   return null;
 }
 
+export const FAIXAS = ['baby', 'infantil', 'juvenil', 'adulto', 'profissional'];
+
+/**
+ * Faixa da coreografia: baby, infantil, juvenil, adulto ou profissional
+ * (aceita variações: "Baby class", "bebê", "kids", "jovem", "teen", "adultos", "sênior", "pro"…).
+ */
+export function faixaDe(valor) {
+  const k = chaveNome(valor);
+  if (!k) return null;
+  if (/^(baby|bady|bebe|babies)/.test(k)) return 'baby';
+  if (/^(infantil|kids|crianca)/.test(k)) return 'infantil';
+  if (/^(juvenil|jovem|jovens|teen|adolescente|junior)/.test(k)) return 'juvenil';
+  if (/^(adulto|senior|master)/.test(k)) return 'adulto';
+  if (/^(profissiona|pro\b)/.test(k)) return 'profissional';
+  throw new ErroHttp(422, `Faixa inválida: "${valor}" (use baby, infantil, juvenil, adulto ou profissional)`, 'faixa_invalida');
+}
+
 async function umOu404(env, sql, id, rotulo) {
   const r = await env.DB.prepare(sql).bind(...(Array.isArray(id) ? id : [id])).first();
   if (!r) throw new ErroHttp(404, `${rotulo} não encontrado(a)`, 'nao_encontrado');
@@ -672,20 +689,21 @@ export function lerCsv(conteudo) {
     campos.push(atual.trim());
     return campos;
   };
-  const cab = dividir(linhas[0]).map((c) => c.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, ''));
+  const cab = dividir(linhas[0]).map((c) => c.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().replace(/[\s-]+/g, '_'));
   return linhas.slice(1).map((l) => {
     const v = dividir(l);
     return Object.fromEntries(cab.map((c, i) => [c, v[i] ?? '']));
   });
 }
 
-const sqlUpsertCoreografia = `INSERT INTO coreografias (id, evento_id, numero, nome, grupo_id, categoria, formacao) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+const sqlUpsertCoreografia = `INSERT INTO coreografias (id, evento_id, numero, nome, grupo_id, categoria, formacao, faixa)
+  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
   ON CONFLICT (evento_id, numero) DO UPDATE SET nome = excluded.nome, grupo_id = excluded.grupo_id, categoria = excluded.categoria,
-                                               formacao = excluded.formacao`;
+                                               formacao = excluded.formacao, faixa = excluded.faixa`;
 
 /* POST /api/admin/eventos/:id/coreografias
-   - text/csv: numero;nome;grupo;categoria;formacao  (ou "integrantes" no lugar de formacao; grupos inexistentes são criados)
-   - JSON: { numero, nome, grupo_id?, categoria?, formacao? } (uma coreografia; mesmo número = atualiza) */
+   - text/csv: numero;nome;grupo;categoria;formacao;faixa  (ou "integrantes" no lugar de formacao; grupos inexistentes são criados)
+   - JSON: { numero, nome, grupo_id?, categoria?, formacao?, faixa? } (uma coreografia; mesmo número = atualiza) */
 export async function adicionarCoreografias(request, env, { id }) {
   const a = await exigirEvento(request, env, id);
   await eventoOu404(env, id);
@@ -700,8 +718,9 @@ export async function adicionarCoreografias(request, env, { id }) {
       ? (await umOu404(env, 'SELECT id FROM grupos WHERE id = ?1 AND evento_id = ?2', [String(b.grupo_id), id], 'Grupo do evento')).id
       : null;
     const formacao = formacaoDe(b.formacao, b.integrantes);
-    await env.DB.prepare(sqlUpsertCoreografia).bind(aleatorio(12), id, numero, nome, grupoId, texto(b.categoria, 100, false) || null, formacao).run();
-    await auditar(env, request, { eventoId: id, ator: a.ator, acao: 'coreografia_salva', detalhes: { numero, nome, formacao } });
+    const faixa = faixaDe(b.faixa);
+    await env.DB.prepare(sqlUpsertCoreografia).bind(aleatorio(12), id, numero, nome, grupoId, texto(b.categoria, 100, false) || null, formacao, faixa).run();
+    await auditar(env, request, { eventoId: id, ator: a.ator, acao: 'coreografia_salva', detalhes: { numero, nome, formacao, faixa } });
     return json({ ok: true }, 201);
   }
 
@@ -709,6 +728,14 @@ export async function adicionarCoreografias(request, env, { id }) {
   if (!linhas.length) throw new ErroHttp(422, 'CSV vazio', 'csv_vazio');
   if (linhas.length > 2000) throw new ErroHttp(422, 'Máximo de 2000 coreografias', 'csv_grande');
   const erros = [];
+  const faixas = linhas.map((l, i) => {
+    try {
+      return faixaDe(l.faixa || l.faixa_etaria || l.nivel);
+    } catch (e) {
+      erros.push(`linha ${i + 2}: ${e.message}`);
+      return null;
+    }
+  });
   const formacoes = linhas.map((l, i) => {
     const numero = Number.parseInt(l.numero, 10);
     const nome = (l.nome || l.coreografia || '').trim();
@@ -728,12 +755,12 @@ export async function adicionarCoreografias(request, env, { id }) {
     const grupoId = await grupoPorNome(env, id, l.grupo || l.escola || l.companhia, cache);
     stmts.push(
       env.DB.prepare(sqlUpsertCoreografia).bind(aleatorio(12), id, Number.parseInt(l.numero, 10), (l.nome || l.coreografia || '').trim(),
-        grupoId, (l.categoria || '').slice(0, 100) || null, formacoes[i]),
+        grupoId, (l.categoria || '').slice(0, 100) || null, formacoes[i], faixas[i]),
     );
   }
   await env.DB.batch(stmts);
   await auditar(env, request, { eventoId: id, ator: a.ator, acao: 'coreografias_importadas', detalhes: { quantidade: stmts.length, grupos: cache.size } });
-  return json({ importadas: stmts.length, grupos: cache.size, sem_formacao: formacoes.filter((f) => !f).length });
+  return json({ importadas: stmts.length, grupos: cache.size, sem_formacao: formacoes.filter((f) => !f).length, sem_faixa: faixas.filter((f) => !f).length });
 }
 
 /* DELETE /api/admin/coreografias/:id — só sem gravações, notas nem links */
@@ -763,7 +790,7 @@ export async function quadroNotas(request, env, { id }) {
         WHERE ej.evento_id = ?1 ORDER BY ej.ordem`,
     ).bind(id),
     env.DB.prepare(
-      `SELECT c.id, c.numero, c.nome, c.categoria, c.formacao, g.nome AS grupo
+      `SELECT c.id, c.numero, c.nome, c.categoria, c.formacao, c.faixa, g.nome AS grupo
          FROM coreografias c LEFT JOIN grupos g ON g.id = c.grupo_id WHERE c.evento_id = ?1 ORDER BY c.numero`,
     ).bind(id),
     env.DB.prepare('SELECT coreografia_id, jurado_id, nota, atualizado_em FROM notas WHERE evento_id = ?1').bind(id),

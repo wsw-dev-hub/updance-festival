@@ -470,7 +470,8 @@ function renderizarCoreografia() {
   const aberto = agoraServidor() >= (estado.sessao.evento.abre_em || 0);
   $('numero').textContent = vazio ? '—' : num(c.numero);
   $('nome-coreografia').textContent = vazio ? 'Nenhuma coreografia cadastrada' : c.nome;
-  $('grupo').textContent = c?.grupo || '';
+  const FAIXA = { baby: 'Baby', infantil: 'Infantil', juvenil: 'Juvenil', adulto: 'Adulto', profissional: 'Profissional' };
+  $('grupo').textContent = c ? [c.grupo, FAIXA[c.faixa]].filter(Boolean).join(' · ') : '';
   $('selo-gravada').hidden = vazio || !jaGravada(c.id);
   $('selo-gravada').textContent = '✓ comentário já gravado';
   $('lista-coreografias').value = String(estado.indice);
