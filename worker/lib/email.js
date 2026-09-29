@@ -16,6 +16,7 @@ export async function enviarEmail(env, to, subject, html) {
   try {
     const mailer = await WorkerMailer.connect({
       host: 'smtp.gmail.com', port: 587, startTls: true, authType: 'login',
+      socketTimeoutMs: 15_000, responseTimeoutMs: 15_000,
       credentials: { username: env.GMAIL_USER, password: env.GMAIL_APP_PASSWORD },
     });
     await mailer.send({ from: { name: 'Up Dance Xperience', email: env.GMAIL_USER }, to, subject, html });

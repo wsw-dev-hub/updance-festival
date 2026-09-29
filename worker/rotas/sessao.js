@@ -90,7 +90,7 @@ function trocarSenha(papel) {
 
 /* ───────────────────────── jurado: recuperação de senha ───────────────────────── */
 
-async function memberForgot(request, env) {
+async function memberForgot(request, env, _params, ctx) {
   const email = emailDe(await corpo(request));
   if (!RE_EMAIL.test(email)) throw new ErroHttp(400, 'Informe um e-mail válido.', 'email_invalido');
   const generica = json({ ok: true }); // nunca revela se o e-mail existe
@@ -108,8 +108,12 @@ async function memberForgot(request, env) {
     .bind(await sha256Hex(token), Date.now() + RESET_TTL_MS, j.id)
     .run();
   const link = `${new URL(request.url).origin}/reset-senha/?token=${token}`;
-  const r = await enviarEmail(env, j.email, 'Redefinir sua senha — UpDance Festival', emailReset(link, j.nome));
-  if (!r.ok) console.error('esqueci a senha: falha ao enviar o e-mail', r.error); // aparece em Workers → Logs
+  // O envio segue em segundo plano: o jurado recebe a resposta na hora, mesmo se o Gmail demorar.
+  const envio = enviarEmail(env, j.email, 'Redefinir sua senha — UpDance Festival', emailReset(link, j.nome)).then((r) => {
+    if (!r.ok) console.error('esqueci a senha: falha ao enviar o e-mail para', j.email, '-', r.error); // Workers → Logs
+  });
+  if (ctx?.waitUntil) ctx.waitUntil(envio);
+  else await envio;
   return generica;
 }
 

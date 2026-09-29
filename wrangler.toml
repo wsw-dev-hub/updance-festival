@@ -29,7 +29,6 @@ id      = "10d76ce53a5049fbab9cab01b68936e2"
 
 [vars]
 AMBIENTE         = "producao"
-MAIL_FROM        = "Up Dance <onboarding@resend.dev>"
 GMAIL_USER       = "updancexperience@gmail.com"
 # Custo do hash de senha (mesmo padrão do worker do blog: 100.000).
 PBKDF2_ITERACOES = "100000"

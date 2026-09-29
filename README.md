@@ -215,6 +215,16 @@ Abra **Workers & Pages → updance-festival → Settings → Variables and Secre
 
 Os segredos ficam guardados entre um deploy e outro.
 
+**Conferir o "Esqueci minha senha" (jurados) em produção:**
+1. Crie a senha de app: Conta Google de `updancexperience@gmail.com` → **Segurança** → verificação em duas etapas ligada → **Senhas de app** → gere uma (16 letras) e cadastre como `GMAIL_APP_PASSWORD` (tipo Secret).
+2. Faça um novo deploy (ou **Retry deployment**) para o Worker ler o segredo.
+3. No app do jurado, digite o e-mail de um jurado de teste e toque em **Esqueci minha senha**. O e-mail "Redefinir sua senha — UpDance Festival" chega em até 1 minuto (confira o spam). O link vale 30 min e é de uso único.
+4. Se não chegar: **Workers & Pages → updance-festival → Logs**, procure `esqueci a senha: falha ao enviar`. As causas comuns são senha de app ausente/errada (`GMAIL_APP_PASSWORD não configurado` ou erro de autenticação 535) e a verificação em duas etapas desligada na conta Google.
+
+A resposta ao jurado é sempre a mesma (não revela se o e-mail tem conta), o envio acontece em segundo plano e há 60 s de intervalo entre pedidos para o mesmo e-mail. Contas de jurado desativadas não recebem o link.
+
+**Administradores e responsáveis** não têm "esqueci minha senha" por e-mail: outro administrador gera uma senha provisória (painel → Administradores, ou "Nova senha" no cartão do evento), e o administrador geral também pode usar a chave de setup em `/admin-login/`.
+
 Não cadastre variáveis de texto (**Text**) pelo painel. As variáveis do `[vars]` do `wrangler.toml` substituem as do painel a cada deploy.
 
 ### Passo 8 — Primeiro acesso
@@ -240,6 +250,7 @@ Não cadastre variáveis de texto (**Text**) pelo painel. As variáveis do `[var
 - [ ] Um responsável de teste entra e cai em `/admin/eventos/`; abrir `/admin/` o leva de volta para lá.
 - [ ] Um jurado de teste entra, cria a senha, testa o microfone, grava e vê **✓ enviado**.
 - [ ] Na aba **Áudios** da tela do evento, o admin ouve o áudio.
+- [ ] "Esqueci minha senha" de um jurado de teste entrega o e-mail com o link (veja acima).
 - [ ] Se algo falhar, veja **Workers & Pages → updance-festival → Logs** (observability está ligado).
 
 ---
