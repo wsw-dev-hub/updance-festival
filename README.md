@@ -125,7 +125,7 @@ O `npx wrangler deploy` **só publica**: ele não cria o bucket R2, não cria ta
 
 ### Passo 4 — Criar as tabelas no D1
 
-O banco `updance-festival_db` já existe (id `cffc135e-aa51-41da-8f87-1b9f4bcf535d` no `wrangler.toml` — o Worker encontra o banco por esse ID, não pelo nome; não o troque). Falta criar as tabelas. Há duas formas de fazer isso.
+O banco `updance-festival_db` já existe (id `191b7031-3739-449b-9d19-ba12c3c12b25` no `wrangler.toml` — o Worker encontra o banco por esse ID, não pelo nome; não o troque). Falta criar as tabelas. Há duas formas de fazer isso.
 
 **Forma A: pelo terminal, no seu computador, na pasta do projeto**
 
