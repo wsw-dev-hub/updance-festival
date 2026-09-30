@@ -178,3 +178,53 @@ export function baixarCsv(nome, linhas) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
+
+/* ------------------------------ Auditoria (aba carregada sob demanda) ------------------------------ */
+
+const ROTULOS_AUDITORIA = {
+  evento_criado: 'Evento criado', evento_editado: 'Evento editado',
+  responsavel_adicionado: 'Responsável adicionado', responsavel_removido: 'Responsável removido',
+  responsavel_senha_redefinida: 'Senha de responsável redefinida', responsavel_criado: 'Responsável criado',
+  jurado_cadastrado: 'Jurado cadastrado e escalado', jurado_escalado: 'Jurado escalado',
+  escala_suspensa: 'Jurado suspenso no evento', escala_reativada: 'Jurado reativado no evento',
+  jurado_senha_redefinida: 'Senha de jurado redefinida', jurado_desativado: 'Conta de jurado desativada', jurado_reativado: 'Conta de jurado reativada',
+  grupo_criado: 'Grupo criado', grupo_editado: 'Grupo editado', grupo_excluido: 'Grupo excluído',
+  coreografia_salva: 'Coreografia salva', coreografias_importadas: 'Coreografias importadas (CSV)', coreografia_excluida: 'Coreografia excluída',
+  link_gerado: 'Link do grupo gerado', links_gerados: 'Links dos grupos gerados', link_desativado: 'Link do grupo desativado',
+  avaliacao_finalizada: 'Jurado finalizou a avaliação', avaliacao_reaberta: 'Avaliação reaberta',
+  audio_aprovado: 'Áudio aprovado', audio_desaprovado: 'Aprovação de áudio retirada',
+  admin_criado: 'Administrador criado', admin_desativado: 'Administrador desativado', admin_reativado: 'Administrador reativado',
+  admin_nivel_alterado: 'Nível de administrador alterado', admin_senha_redefinida: 'Senha de administrador redefinida',
+  admin_setup_criado: 'Administrador criado pela chave de setup', admin_setup_redefinido: 'Senha redefinida pela chave de setup',
+};
+
+/**
+ * Tabela de auditoria paginada (50 por vez). Só consulta o banco quando `carregar()` é chamado —
+ * ou seja, quando a aba é aberta, em "Atualizar" e em "Carregar mais".
+ * @param {{ tbody: string, mais: string, info: string, evento: () => string|null }} ids
+ */
+export function painelAuditoria({ tbody, mais, info, evento }) {
+  const st = { cursor: null, carregado: false };
+  async function carregar(reiniciar = true) {
+    if (reiniciar) { st.cursor = null; $(tbody).replaceChildren(vazio(4, 'Carregando…')); }
+    const ev = evento();
+    const q = new URLSearchParams();
+    if (ev) q.set('evento', ev);
+    if (st.cursor) q.set('antes', st.cursor);
+    const r = await api('GET', `/api/admin/auditoria?${q}`);
+    st.carregado = true;
+    const linhas = r.itens.map((l) =>
+      el('tr', {},
+        el('td', { class: 'ident', textContent: fmtHora(l.criado_em) }),
+        el('td', { class: 'ident', textContent: l.ator.replace(/^(admin|member|jurado):/, '') }),
+        el('td', { textContent: ROTULOS_AUDITORIA[l.acao] || l.acao }),
+        el('td', { textContent: l.alvo || '' }),
+      ));
+    if (reiniciar) $(tbody).replaceChildren(...(linhas.length ? linhas : [vazio(4, r.sem_tabela ? 'Auditoria ainda não ativada: execute o atualizacao-auditoria-otimizada.sql no Console do D1.' : 'Nenhum registro nos últimos 90 dias.')]));
+    else $(tbody).append(...linhas);
+    if (r.itens.length) st.cursor = r.itens.at(-1).id;
+    $(mais).hidden = !r.mais;
+    $(info).textContent = `Registros dos últimos ${r.retencao_dias || 90} dias · só ações da organização e finalizações de jurados.`;
+  }
+  return { carregar, get carregado() { return st.carregado; } };
+}

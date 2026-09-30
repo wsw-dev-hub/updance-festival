@@ -18,6 +18,7 @@
 import { json, lerJson, ErroHttp, ipDe } from '../lib/http.js';
 import { aleatorio, randomToken, sha256Hex, timingSafeEqual } from '../lib/cripto.js';
 import { gerarHash, conferir, validarSenhaNova } from '../lib/senha.js';
+import { auditar } from '../lib/auditoria.js';
 import { enviarEmail, emailReset } from '../lib/email.js';
 import { PAPEIS, autenticar, criarSessao, encerrarSessao, exigirConta } from '../lib/sessao.js';
 
@@ -146,7 +147,7 @@ async function memberReset(request, env) {
  * Usado para o primeiro acesso e para recuperar o acesso se todos os admins perderem a senha.
  * Limite: 5 chaves erradas por IP a cada 15 min.
  */
-async function adminSetup(request, env) {
+async function adminSetup(request, env, _p, ctx) {
   const ip = ipDe(request);
   const chaveFalhas = `fest:setupfail:${ip}`;
   const falhas = Number((await env.KV.get(chaveFalhas)) || 0);
@@ -182,6 +183,7 @@ async function adminSetup(request, env) {
       .run();
   }
   await env.KV.delete(chaveFalhas);
+  auditar(env, ctx, { ator: 'chave de setup', acao: existe ? 'admin_setup_redefinido' : 'admin_setup_criado', alvo: email });
   return json({ ok: true, criado: !existe });
 }
 

@@ -6,6 +6,7 @@ import { json, lerJson, lerBytes, ErroHttp } from '../lib/http.js';
 import { exigirJurado } from '../lib/sessao.js';
 import { sha256Hex } from '../lib/cripto.js';
 import { gerarIdentificadores, mimeBase, EXTENSOES } from '../lib/identificador.js';
+import { auditar } from '../lib/auditoria.js';
 
 export const LIMITES = {
   TRECHO_MAX_BYTES: 1024 * 1024,           // 1 MB por trecho (~10 s de áudio ocupam ~40 KB)
@@ -140,7 +141,7 @@ export async function salvarNota(request, env, { coreografia }) {
 /* POST /api/finalizar/:coreografia
    Conclui a avaliação do jurado nessa coreografia: exige a nota registrada e nenhum áudio ainda chegando.
    Depois disso, nota e gravações dessa coreografia ficam bloqueadas para ele. */
-export async function finalizarAvaliacao(request, env, { coreografia }) {
+export async function finalizarAvaliacao(request, env, { coreografia }, ctx) {
   const m = await exigirJurado(request, env);
   const c = await env.DB.prepare('SELECT id, evento_id, numero, nome FROM coreografias WHERE id = ?1').bind(coreografia).first();
   if (!c) throw new ErroHttp(404, 'Coreografia não encontrada', 'nao_encontrada');
@@ -162,6 +163,7 @@ export async function finalizarAvaliacao(request, env, { coreografia }) {
   await env.DB.prepare('INSERT OR IGNORE INTO finalizacoes (coreografia_id, jurado_id, evento_id, finalizado_em) VALUES (?1, ?2, ?3, ?4)')
     .bind(c.id, m.id, evento.id, agora)
     .run();
+  auditar(env, ctx, { eventoId: evento.id, ator: `jurado:${m.email}`, acao: 'avaliacao_finalizada', alvo: `${String(c.numero).padStart(3, '0')} · ${c.nome} — nota ${nota.results[0].nota}` });
   return json({ ok: true, finalizado_em: agora });
 }
 

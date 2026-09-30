@@ -41,6 +41,7 @@
     <button class="tab" data-secao="admins" role="tab"><i class="mdi mdi-shield-account"></i> Administradores <span id="c-admins" class="contador"></span></button>
     <button class="tab" data-secao="jurados" role="tab"><i class="mdi mdi-account-star"></i> Jurados <span id="c-jurados-total" class="contador"></span></button>
     <button class="tab" data-secao="grupos" role="tab"><i class="mdi mdi-account-group"></i> Grupos <span id="c-grupos" class="contador"></span></button>
+    <button class="tab" data-secao="auditoria" role="tab"><i class="mdi mdi-history"></i> Auditoria</button>
     <button class="tab" data-secao="conta" role="tab"><i class="mdi mdi-account-cog"></i> Minha conta</button>
   </nav>
 
@@ -108,6 +109,21 @@
       <thead><tr><th>Grupo</th><th>Evento</th><th>Direção e coordenação</th><th>Coreografias</th><th>Ações</th></tr></thead>
       <tbody id="tb-grupos"></tbody>
     </table></div>
+  </section>
+
+
+  <!-- ============================ AUDITORIA ============================ -->
+  <section id="secao-auditoria" class="secao card" hidden>
+    <div class="card-head">
+      <h2>Auditoria · contas e acessos</h2>
+      <button id="btn-atualizar-auditoria" class="btn btn-sec" type="button"><i class="mdi mdi-refresh"></i> Atualizar</button>
+    </div>
+    <p id="auditoria-info" class="muted"></p>
+    <div class="tabela-rolagem"><table>
+      <thead><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Sobre</th></tr></thead>
+      <tbody id="tb-auditoria"></tbody>
+    </table></div>
+    <div class="linha"><button id="btn-mais-auditoria" class="btn btn-sec" type="button" hidden><i class="mdi mdi-chevron-down"></i> Carregar mais</button></div>
   </section>
 
   <!-- ============================ CONTA ============================ -->

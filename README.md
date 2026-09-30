@@ -125,7 +125,7 @@ O `npx wrangler deploy` **só publica**: ele não cria o bucket R2, não cria ta
 
 ### Passo 4 — Criar as tabelas no D1
 
-O banco `updance-festival_db` já existe (id `191b7031-…` no `wrangler.toml`). Falta criar as tabelas. Há duas formas de fazer isso.
+O banco `updance-festival_db` já existe (id `cffc135e-aa51-41da-8f87-1b9f4bcf535d` no `wrangler.toml` — o Worker encontra o banco por esse ID, não pelo nome; não o troque). Falta criar as tabelas. Há duas formas de fazer isso.
 
 **Forma A: pelo terminal, no seu computador, na pasta do projeto**
 
@@ -147,7 +147,7 @@ npx wrangler d1 execute updance-festival_db --remote --file=schema.sql
 SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name;
 ```
 
-O resultado deve ter **12 tabelas**: `admins, coreografias, evento_jurados, evento_responsaveis, eventos, finalizacoes, gravacoes, grupos, jurados, links_entrega, notas, trechos`.
+O resultado deve ter **13 tabelas**: `admins, auditoria, coreografias, evento_jurados, evento_responsaveis, eventos, finalizacoes, gravacoes, grupos, jurados, links_entrega, notas, trechos`.
 
 > **Já executou o `schema.sql` da versão anterior (10 tabelas)?** Execute **uma vez** o `atualizacao-notas-ranking.sql`, no Console ou pelo terminal:
 >
@@ -166,10 +166,10 @@ O resultado deve ter **12 tabelas**: `admins, coreografias, evento_jurados, even
 > 2. **`atualizacao-grupos-por-evento.sql`**: liga cada grupo ao seu evento (coluna `evento_id`). Grupo usado em mais de um evento ganha uma cópia por evento, com a mesma equipe; grupo sem coreografia fica "sem evento" (aparece no painel de controle para excluir). Nenhuma coreografia, nota ou áudio é apagado. A consulta do fim mostra quantos grupos ficaram em cada evento.
 > 3. **`atualizacao-faixa-coreografias.sql`**: acrescenta a coluna `faixa` às coreografias (as existentes ficam "sem faixa" até alguém definir).
 > 4. **`atualizacao-finalizacao.sql`**: cria a tabela `finalizacoes` (botão "Finalizar avaliação" do jurado).
-> 5. **`atualizacao-remover-auditoria.sql`**: apaga a tabela `auditoria` (o sistema não grava mais esse histórico) e libera o espaço no D1.
+> 5. **`atualizacao-auditoria-otimizada.sql`**: cria a auditoria enxuta (se existir a tabela antiga, ela é substituída e o histórico antigo é descartado).
 > 6. **`atualizacao-integrantes-coreografias.sql`**: cria `integrantes` e `coreografo` nas coreografias e copia para cada uma o que estava no cadastro do grupo dela (confira e ajuste na aba Coreografias).
 >
-> Resumo da ordem para um banco antigo: `atualizacao-notas-ranking.sql` → `atualizacao-grupos-equipe.sql` → `atualizacao-grupos-por-evento.sql` → `atualizacao-faixa-coreografias.sql` → `atualizacao-finalizacao.sql` → `atualizacao-remover-auditoria.sql` → `atualizacao-integrantes-coreografias.sql`. Pule os que já executou. Banco criado com o `schema.sql` desta versão já tem tudo e não precisa de nenhum arquivo de atualização.
+> Resumo da ordem para um banco antigo: `atualizacao-notas-ranking.sql` → `atualizacao-grupos-equipe.sql` → `atualizacao-grupos-por-evento.sql` → `atualizacao-faixa-coreografias.sql` → `atualizacao-finalizacao.sql` → `atualizacao-auditoria-otimizada.sql` → `atualizacao-integrantes-coreografias.sql`. Pule os que já executou. Banco criado com o `schema.sql` desta versão já tem tudo e não precisa de nenhum arquivo de atualização.
 
 > **Se o banco já tinha tabelas de uma versão anterior deste projeto,** confira com a consulta abaixo:
 >
@@ -272,6 +272,7 @@ Não cadastre variáveis de texto (**Text**) pelo painel. As variáveis do `[var
 | `POST /api/admin/coreografias/:id/link` · `POST /api/admin/eventos/:id/links` | geral ou responsável | Link exclusivo de notas e áudios de uma coreografia, ou de todas (o novo desativa o anterior) |
 | `GET /ouvir/:token` | escola/grupo (público, com o link) | Página de notas e áudios da coreografia |
 | `GET /api/admin/resumo` | geral | Números e alertas do painel de controle |
+| `GET /api/admin/auditoria?evento=&antes=` | geral ou responsável do evento (sem evento: só geral) | Auditoria enxuta, 50 registros por vez |
 | `POST /api/admin/eventos` `{…, responsaveis:[{nome,email}]}` | geral ou responsável | Cria o evento já com os responsáveis (quem cria, se responsável, entra automaticamente) |
 | `POST` / `DELETE /api/admin/eventos/:id/responsaveis` · `POST …/responsaveis/:admin/redefinir-senha` | geral ou responsável do evento | Liga, desliga ou gera nova senha para responsáveis (o último não sai) |
 | `GET` / `POST /api/admin/eventos/:id/grupos` | geral ou responsável do evento | Grupos/escolas do evento |
@@ -282,7 +283,14 @@ Não cadastre variáveis de texto (**Text**) pelo painel. As variáveis do `[var
 - **Sessões:** ficam no KV com o prefixo `fest:`, então não se misturam com as do blog. Trocar ou redefinir a senha e desativar a conta derrubam as sessões na hora.
 - **Cookies:** HttpOnly, Secure e SameSite=Lax.
 - **Escritas:** exigem mesma origem mais o cabeçalho `X-UDX-Festival` (proteção CSRF).
-- **Sem log de auditoria:** para economizar o banco D1, o sistema não grava histórico de ações. Falhas de envio de e-mail aparecem em **Workers & Pages → updance-festival → Logs**.
+- **Auditoria enxuta** (mesmo princípio do painel do blog no `updance_db`), para não pesar no plano gratuito do D1:
+  - registra só **ações da organização** (eventos, responsáveis, jurados, grupos, coreografias, links, contas, aprovação de áudio, reabertura) e a **finalização de avaliação** pelo jurado;
+  - **não** registra logins, notas, gravações, trechos, pedidos de senha nem acessos aos links — o grosso do tráfego;
+  - **uma linha por ação** (importar 200 coreografias = 1 linha; gerar 50 links = 1 linha), sem IP e sem JSON;
+  - a gravação é feita em segundo plano e nunca atrasa nem derruba a ação;
+  - a aba **Auditoria** (última aba da tela do evento; "Auditoria · contas e acessos" no painel de controle) só consulta o banco quando é aberta, 50 linhas por vez ("Carregar mais"), pelo índice `evento_id + id`;
+  - guarda **90 dias**: os registros mais antigos são apagados ao abrir a aba, no máximo 1 vez por dia.
+- Falhas de envio de e-mail aparecem em **Workers & Pages → updance-festival → Logs**.
 
 ## Identidade visual e responsividade
 
@@ -323,7 +331,7 @@ atualizacao-grupos-equipe.sql   bancos criados antes da equipe dos grupos (execu
 atualizacao-grupos-por-evento.sql   bancos criados antes dos grupos por evento (executar 3º)
 atualizacao-faixa-coreografias.sql  bancos criados antes da faixa das coreografias (executar 4º)
 atualizacao-finalizacao.sql         bancos criados antes do botão Finalizar (executar 5º)
-atualizacao-remover-auditoria.sql   apaga a tabela de auditoria antiga (executar 6º)
+atualizacao-auditoria-otimizada.sql auditoria enxuta (executar 6º)
 atualizacao-integrantes-coreografias.sql  integrantes/coreógrafo passam do grupo para a coreografia (executar 7º)
 vite.config.js · wrangler.toml · package.json
 ```

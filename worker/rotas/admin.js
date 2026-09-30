@@ -14,6 +14,7 @@ import { aleatorio, sha256Hex } from '../lib/cripto.js';
 import { gerarHash, gerarSenhaProvisoria } from '../lib/senha.js';
 import { servirAudio } from '../lib/midia.js';
 import { chaveTrecho } from './jurado.js';
+import { auditar, listar as listarAuditoria_, limparAntigos } from '../lib/auditoria.js';
 
 const OFFSET_BRASILIA = '-03:00'; // Brasil sem horário de verão desde 2019
 const RE_EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
@@ -149,7 +150,7 @@ async function novoAdmin(env, { nome, email: e, nivel, criadoPor }) {
 }
 
 /* POST /api/admin/admins  { nome, email, nivel? } */
-export async function criarAdmin(request, env) {
+export async function criarAdmin(request, env, _p, ctx) {
   const a = await exigirGeral(request, env);
   const b = await lerJson(request);
   const nome = texto(b.nome, 120);
@@ -159,11 +160,12 @@ export async function criarAdmin(request, env) {
     throw new ErroHttp(409, 'Já existe um administrador com este e-mail', 'email_existente');
   }
   const { id, senha } = await novoAdmin(env, { nome, email: e, nivel, criadoPor: a.email });
+  auditar(env, ctx, { ator: a.ator, acao: nivel === 'geral' ? 'admin_criado' : 'responsavel_criado', alvo: e });
   return comSenha({ id, nome, email: e, nivel }, senha, 201);
 }
 
 /* PATCH /api/admin/admins/:id  { nome?, ativo?, nivel? } */
-export async function atualizarAdmin(request, env, { id }) {
+export async function atualizarAdmin(request, env, { id }, ctx) {
   const a = await exigirGeral(request, env);
   const alvo = await umOu404(env, 'SELECT * FROM admins WHERE id = ?1', id, 'Administrador');
   const b = await lerJson(request);
@@ -180,15 +182,17 @@ export async function atualizarAdmin(request, env, { id }) {
   await env.DB.prepare('UPDATE admins SET nome = ?1, ativo = ?2, nivel = ?3, sessao_versao = sessao_versao + ?4 WHERE id = ?5')
     .bind(nome, ativo, nivel, mudouAcesso ? 1 : 0, id)
     .run();
+  if (mudouAcesso) auditar(env, ctx, { ator: a.ator, acao: ativo ? (ativo !== alvo.ativo ? 'admin_reativado' : 'admin_nivel_alterado') : 'admin_desativado', alvo: `${alvo.email}${nivel !== alvo.nivel ? ` → ${nivel}` : ''}` });
   return json({ ok: true, nome, ativo: !!ativo, nivel });
 }
 
 /* POST /api/admin/admins/:id/redefinir-senha — gera senha provisória e derruba sessões */
-export async function redefinirSenhaAdmin(request, env, { id }) {
+export async function redefinirSenhaAdmin(request, env, { id }, ctx) {
   const a = await exigirGeral(request, env);
   const alvo = await umOu404(env, 'SELECT * FROM admins WHERE id = ?1', id, 'Administrador');
   if (alvo.id === a.id) throw new ErroHttp(422, 'Para a sua conta, use "Minha conta → Trocar senha"', 'auto_redefinicao');
   const senha = await redefinirConta(env, 'admins', id);
+  auditar(env, ctx, { ator: a.ator, acao: 'admin_senha_redefinida', alvo: alvo.email });
   return comSenha({ id, email: alvo.email }, senha);
 }
 
@@ -256,7 +260,7 @@ async function exigirContaExclusiva(env, a, tabelaVinculo, colunaConta, contaId)
 
 /* PATCH /api/admin/jurados/:id  { nome?, telefone?, ativo? }
    Responsável: nome e telefone dos jurados dos seus eventos. Desativar a conta (todos os eventos): só geral. */
-export async function atualizarJurado(request, env, { id }) {
+export async function atualizarJurado(request, env, { id }, ctx) {
   const a = await exigirAdmin(request, env);
   const j = await umOu404(env, 'SELECT * FROM jurados WHERE id = ?1', id, 'Jurado');
   if (!(await juradoAoAlcance(env, a, id))) throw new ErroHttp(404, 'Jurado não encontrado(a)', 'nao_encontrado');
@@ -271,17 +275,19 @@ export async function atualizarJurado(request, env, { id }) {
   await env.DB.prepare('UPDATE jurados SET nome = ?1, telefone = ?2, ativo = ?3, sessao_versao = sessao_versao + ?4 WHERE id = ?5')
     .bind(nome, telefone, ativo, ativo !== j.ativo ? 1 : 0, id)
     .run();
+  if (ativo !== j.ativo) auditar(env, ctx, { ator: a.ator, acao: ativo ? 'jurado_reativado' : 'jurado_desativado', alvo: j.email });
   return json({ ok: true, nome, telefone, ativo: !!ativo });
 }
 
 /* POST /api/admin/jurados/:id/redefinir-senha
    Geral: qualquer jurado. Responsável: só jurados escalados em um evento dele. */
-export async function redefinirSenhaJurado(request, env, { id }) {
+export async function redefinirSenhaJurado(request, env, { id }, ctx) {
   const a = await exigirAdmin(request, env);
   const j = await umOu404(env, 'SELECT * FROM jurados WHERE id = ?1', id, 'Jurado');
   if (!(await juradoAoAlcance(env, a, id))) throw new ErroHttp(404, 'Jurado não encontrado(a)', 'nao_encontrado');
   await exigirContaExclusiva(env, a, 'evento_jurados', 'jurado_id', id);
   const senha = await redefinirConta(env, 'jurados', id);
+  auditar(env, ctx, { ator: a.ator, acao: 'jurado_senha_redefinida', alvo: j.email });
   return comSenha({ id, email: j.email }, senha);
 }
 
@@ -343,7 +349,7 @@ function camposGrupo(b, atual = {}) {
 }
 
 /* POST /api/admin/eventos/:id/grupos — cadastra grupo/escola no evento */
-export async function criarGrupo(request, env, { id: eventoId }) {
+export async function criarGrupo(request, env, { id: eventoId }, ctx) {
   const a = await exigirEvento(request, env, eventoId);
   await eventoOu404(env, eventoId);
   const g = camposGrupo(await lerJson(request));
@@ -358,13 +364,14 @@ export async function criarGrupo(request, env, { id: eventoId }) {
   )
     .bind(id, g.nome, chave, g.cidade, g.responsavel, g.email, g.telefone, Date.now(), g.diretores, g.coordenadores, eventoId)
     .run();
+  auditar(env, ctx, { eventoId, ator: a.ator, acao: 'grupo_criado', alvo: g.nome });
   return json({ id, evento_id: eventoId, ...g }, 201);
 }
 
 const sqlGrupo = 'SELECT * FROM grupos WHERE id = ?1';
 
 /* PATCH /api/admin/grupos/:id — responsável do evento do grupo (ou geral) */
-export async function atualizarGrupo(request, env, { id }) {
+export async function atualizarGrupo(request, env, { id }, ctx) {
   const { a, linha: atual } = await exigirRegistroDoEvento(request, env, sqlGrupo, id, 'Grupo');
   const g = camposGrupo(await lerJson(request), atual);
   const chave = chaveGrupo(atual.evento_id || 'sem-evento', g.nome);
@@ -376,15 +383,17 @@ export async function atualizarGrupo(request, env, { id }) {
   )
     .bind(g.nome, chave, g.cidade, g.responsavel, g.email, g.telefone, g.diretores, g.coordenadores, id)
     .run();
+  auditar(env, ctx, { eventoId: atual.evento_id, ator: a.ator, acao: 'grupo_editado', alvo: g.nome });
   return json({ id, evento_id: atual.evento_id, ...g });
 }
 
 /* DELETE /api/admin/grupos/:id — só sem coreografias vinculadas */
-export async function excluirGrupo(request, env, { id }) {
+export async function excluirGrupo(request, env, { id }, ctx) {
   const { a, linha: g } = await exigirRegistroDoEvento(request, env, sqlGrupo, id, 'Grupo');
   const { n } = await env.DB.prepare('SELECT COUNT(*) AS n FROM coreografias WHERE grupo_id = ?1').bind(id).first();
   if (n) throw new ErroHttp(409, `O grupo tem ${n} coreografia(s) vinculada(s)`, 'grupo_em_uso');
   await env.DB.prepare('DELETE FROM grupos WHERE id = ?1').bind(id).run();
+  auditar(env, ctx, { eventoId: g.evento_id, ator: a.ator, acao: 'grupo_excluido', alvo: g.nome });
   return json({ ok: true });
 }
 
@@ -435,7 +444,7 @@ function camposEvento(b, atual = null) {
 /* POST /api/admin/eventos  { ...campos, responsaveis?: [{ nome, email }] }
    Geral ou responsável. Quem é responsável e cria o evento passa a ser responsável por ele.
    Contas novas de responsável voltam com senha provisória (mostrada uma única vez). */
-export async function criarEvento(request, env) {
+export async function criarEvento(request, env, _p, ctx) {
   const a = await exigirAdmin(request, env);
   const b = await lerJson(request);
   const ev = camposEvento(b);
@@ -468,11 +477,13 @@ export async function criarEvento(request, env) {
     if (email(r.email) === a.email) continue;
     responsaveis.push(await vincularResponsavel(env, request, a, id, r));
   }
+  auditar(env, ctx, { eventoId: id, ator: a.ator, acao: 'evento_criado', alvo: ev.nome });
+  for (const r of responsaveis) if (!r.voce) auditar(env, ctx, { eventoId: id, ator: a.ator, acao: 'responsavel_adicionado', alvo: r.email });
   return json({ id, ...ev, responsaveis, link_login: `${new URL(request.url).origin}/admin-login/` }, 201);
 }
 
 /* PATCH /api/admin/eventos/:id  (geral ou responsável do evento) */
-export async function atualizarEvento(request, env, { id }) {
+export async function atualizarEvento(request, env, { id }, ctx) {
   const a = await exigirEvento(request, env, id);
   const atual = await eventoOu404(env, id);
   const ev = camposEvento(await lerJson(request), atual);
@@ -483,6 +494,7 @@ export async function atualizarEvento(request, env, { id }) {
     .bind(ev.nome, ev.data, ev.local, ev.abre_em, ev.fecha_em, ev.anonimizar_jurados, ev.duracao_max_s,
       ev.nota_min, ev.nota_max, ev.nota_casas, id)
     .run();
+  auditar(env, ctx, { eventoId: id, ator: a.ator, acao: 'evento_editado', alvo: ev.nome });
   return json({ id, ...ev });
 }
 
@@ -553,7 +565,7 @@ export async function detalharEvento(request, env, { id }) {
 /* POST /api/admin/eventos/:id/jurados
    { jurado_id }                  → escala um jurado já cadastrado (somente geral)
    { nome, email, telefone? }     → escala pelo e-mail; se a conta não existir, cria com senha provisória */
-export async function escalarJurado(request, env, { id }) {
+export async function escalarJurado(request, env, { id }, ctx) {
   const a = await exigirEvento(request, env, id);
   await eventoOu404(env, id);
   const b = await lerJson(request);
@@ -580,18 +592,21 @@ export async function escalarJurado(request, env, { id }) {
   await env.DB.prepare('INSERT INTO evento_jurados (evento_id, jurado_id, ordem, criado_em) VALUES (?1, ?2, ?3, ?4)')
     .bind(id, j.id, ordem, Date.now())
     .run();
+  auditar(env, ctx, { eventoId: id, ator: a.ator, acao: senha ? 'jurado_cadastrado' : 'jurado_escalado', alvo: `J${ordem} · ${j.email}` });
   const resp = { ok: true, jurado_id: j.id, nome: j.nome, email: j.email, ordem, criado: !!senha, link: `${new URL(request.url).origin}/?evento=${id}` };
   return senha ? comSenha(resp, senha, 201) : json(resp, 201);
 }
 
 /* PATCH /api/admin/eventos/:id/jurados/:jurado  { ativo } — tira/devolve o acesso ao evento */
-export async function atualizarEscala(request, env, { id, jurado }) {
+export async function atualizarEscala(request, env, { id, jurado }, ctx) {
   const a = await exigirEvento(request, env, id);
   const { ativo } = await lerJson(request);
   const r = await env.DB.prepare('UPDATE evento_jurados SET ativo = ?1 WHERE evento_id = ?2 AND jurado_id = ?3')
     .bind(ativo ? 1 : 0, id, jurado)
     .run();
   if (!r.meta.changes) throw new ErroHttp(404, 'Escala não encontrada', 'nao_encontrado');
+  const jj = await env.DB.prepare('SELECT email FROM jurados WHERE id = ?1').bind(jurado).first();
+  auditar(env, ctx, { eventoId: id, ator: a.ator, acao: ativo ? 'escala_reativada' : 'escala_suspensa', alvo: jj?.email || jurado });
   return json({ ok: true, ativo: !!ativo });
 }
 
@@ -618,16 +633,17 @@ async function vincularResponsavel(env, request, a, eventoId, { nome, email: em 
 }
 
 /* POST /api/admin/eventos/:id/responsaveis  { nome, email } */
-export async function adicionarResponsavel(request, env, { id }) {
+export async function adicionarResponsavel(request, env, { id }, ctx) {
   const a = await exigirEvento(request, env, id);
   await eventoOu404(env, id);
   const r = await vincularResponsavel(env, request, a, id, await lerJson(request));
+  auditar(env, ctx, { eventoId: id, ator: a.ator, acao: 'responsavel_adicionado', alvo: r.email });
   return json({ ok: true, ...r, link: `${new URL(request.url).origin}/admin-login/` }, 201);
 }
 
 /* DELETE /api/admin/eventos/:id/responsaveis/:admin
    Responsável pode tirar outros (ou a si mesmo), desde que o evento continue com pelo menos um. */
-export async function removerResponsavel(request, env, { id, admin }) {
+export async function removerResponsavel(request, env, { id, admin }, ctx) {
   const a = await exigirEvento(request, env, id);
   if (a.nivel !== 'geral') {
     const { n } = await env.DB.prepare('SELECT COUNT(*) AS n FROM evento_responsaveis WHERE evento_id = ?1').bind(id).first();
@@ -636,11 +652,13 @@ export async function removerResponsavel(request, env, { id, admin }) {
   const r = await env.DB.prepare('DELETE FROM evento_responsaveis WHERE evento_id = ?1 AND admin_id = ?2').bind(id, admin).run();
   if (!r.meta.changes) throw new ErroHttp(404, 'Responsável não encontrado', 'nao_encontrado');
   await env.DB.prepare('UPDATE admins SET sessao_versao = sessao_versao + 1 WHERE id = ?1').bind(admin).run();
+  const quem = await env.DB.prepare('SELECT email FROM admins WHERE id = ?1').bind(admin).first();
+  auditar(env, ctx, { eventoId: id, ator: a.ator, acao: 'responsavel_removido', alvo: quem?.email || admin });
   return json({ ok: true });
 }
 
 /* POST /api/admin/eventos/:id/responsaveis/:admin/redefinir-senha — senha provisória para outro responsável do evento */
-export async function redefinirSenhaResponsavel(request, env, { id, admin }) {
+export async function redefinirSenhaResponsavel(request, env, { id, admin }, ctx) {
   const a = await exigirEvento(request, env, id);
   const alvo = await env.DB.prepare(
     `SELECT ad.* FROM evento_responsaveis er JOIN admins ad ON ad.id = er.admin_id
@@ -650,6 +668,7 @@ export async function redefinirSenhaResponsavel(request, env, { id, admin }) {
   if (alvo.id === a.id) throw new ErroHttp(422, 'Para a sua conta, use "Minha conta → Trocar senha"', 'auto_redefinicao');
   await exigirContaExclusiva(env, a, 'evento_responsaveis', 'admin_id', alvo.id);
   const senha = await redefinirConta(env, 'admins', alvo.id);
+  auditar(env, ctx, { eventoId: id, ator: a.ator, acao: 'responsavel_senha_redefinida', alvo: alvo.email });
   return comSenha({ id: alvo.id, email: alvo.email }, senha);
 }
 
@@ -714,7 +733,7 @@ function equipeDaCoreografia(integrantes, coreografo) {
    - text/csv: numero;nome;grupo;categoria;formacao;faixa;integrantes;coreografo
      (integrantes: nomes separados por vírgula — ou só o número de bailarinos; sem formação, ela sai da contagem)
    - JSON: { numero, nome, grupo_id?, categoria?, formacao?, faixa? } (uma coreografia; mesmo número = atualiza) */
-export async function adicionarCoreografias(request, env, { id }) {
+export async function adicionarCoreografias(request, env, { id }, ctx) {
   const a = await exigirEvento(request, env, id);
   await eventoOu404(env, id);
   const ehJson = (request.headers.get('Content-Type') || '').includes('application/json');
@@ -733,6 +752,7 @@ export async function adicionarCoreografias(request, env, { id }) {
     await env.DB.prepare(sqlUpsertCoreografia)
       .bind(aleatorio(12), id, numero, nome, grupoId, texto(b.categoria, 100, false) || null, formacao, faixa, eq.integrantes, eq.coreografo)
       .run();
+    auditar(env, ctx, { eventoId: id, ator: a.ator, acao: 'coreografia_salva', alvo: `${String(numero).padStart(3, '0')} · ${nome}` });
     return json({ ok: true }, 201);
   }
 
@@ -779,11 +799,12 @@ export async function adicionarCoreografias(request, env, { id }) {
     );
   }
   await env.DB.batch(stmts);
+  auditar(env, ctx, { eventoId: id, ator: a.ator, acao: 'coreografias_importadas', alvo: `${stmts.length} coreografia(s) pelo CSV` });
   return json({ importadas: stmts.length, grupos: cache.size, sem_formacao: formacoes.filter((f) => !f).length, sem_faixa: faixas.filter((f) => !f).length });
 }
 
 /* DELETE /api/admin/coreografias/:id — só sem gravações, notas nem links */
-export async function excluirCoreografia(request, env, { id }) {
+export async function excluirCoreografia(request, env, { id }, ctx) {
   const { a, linha: c } = await exigirRegistroDoEvento(request, env, 'SELECT * FROM coreografias WHERE id = ?1', id, 'Coreografia');
   const uso = await env.DB.prepare(
     `SELECT (SELECT COUNT(*) FROM gravacoes WHERE coreografia_id = ?1) + (SELECT COUNT(*) FROM notas WHERE coreografia_id = ?1)
@@ -791,6 +812,7 @@ export async function excluirCoreografia(request, env, { id }) {
   ).bind(id).first();
   if (uso.n) throw new ErroHttp(409, 'A coreografia já tem gravações, notas ou links; não pode ser excluída', 'coreografia_em_uso');
   await env.DB.prepare('DELETE FROM coreografias WHERE id = ?1').bind(id).run();
+  auditar(env, ctx, { eventoId: c.evento_id, ator: a.ator, acao: 'coreografia_excluida', alvo: `${String(c.numero).padStart(3, '0')} · ${c.nome}` });
   return json({ ok: true });
 }
 
@@ -859,13 +881,34 @@ export async function quadroNotas(request, env, { id }) {
 
 /* DELETE /api/admin/eventos/:id/finalizacoes/:coreografia/:jurado
    Reabre a avaliação de um jurado numa coreografia (ex.: finalizou por engano). Geral ou responsável do evento. */
-export async function reabrirAvaliacao(request, env, { id, coreografia, jurado }) {
+export async function reabrirAvaliacao(request, env, { id, coreografia, jurado }, ctx) {
   const a = await exigirEvento(request, env, id);
   const r = await env.DB.prepare('DELETE FROM finalizacoes WHERE evento_id = ?1 AND coreografia_id = ?2 AND jurado_id = ?3')
     .bind(id, coreografia, jurado)
     .run();
   if (!r.meta.changes) throw new ErroHttp(404, 'Esta avaliação não está finalizada', 'nao_encontrado');
+  const info = await env.DB.prepare('SELECT c.numero, c.nome, (SELECT email FROM jurados WHERE id = ?2) AS jurado FROM coreografias c WHERE c.id = ?1')
+    .bind(coreografia, jurado).first();
+  auditar(env, ctx, { eventoId: id, ator: a.ator, acao: 'avaliacao_reaberta', alvo: info ? `${String(info.numero).padStart(3, '0')} · ${info.nome} — ${info.jurado}` : coreografia });
   return json({ ok: true });
+}
+
+/* GET /api/admin/auditoria?evento=<id>&antes=<id>
+   Com evento: geral ou responsável do evento. Sem evento (contas e acessos): só geral.
+   Só é chamada quando a aba Auditoria é aberta (e "Carregar mais"): 50 linhas por vez, pelo índice. */
+export async function listarAuditoria(request, env, _p, ctx) {
+  const u = new URL(request.url);
+  const evento = u.searchParams.get('evento');
+  if (evento) await exigirEvento(request, env, evento);
+  else await exigirGeral(request, env);
+  try {
+    const r = await listarAuditoria_(env, evento || null, Number(u.searchParams.get('antes')));
+    await limparAntigos(env, ctx);
+    return json(r);
+  } catch (e) {
+    if (/no such table/i.test(e.message)) return json({ itens: [], mais: false, sem_tabela: true });
+    throw e;
+  }
 }
 
 /* ================================ GRAVAÇÕES ================================ */
@@ -931,13 +974,14 @@ export async function ouvirGravacao(request, env, { id }) {
 }
 
 /* POST /api/admin/gravacoes/:id/aprovar  { aprovada } */
-export async function aprovarGravacao(request, env, { id }) {
-  const { a, linha: g } = await exigirRegistroDoEvento(request, env, 'SELECT evento_id, status FROM gravacoes WHERE id = ?1', id, 'Gravação');
+export async function aprovarGravacao(request, env, { id }, ctx) {
+  const { a, linha: g } = await exigirRegistroDoEvento(request, env, 'SELECT evento_id, status, identificador FROM gravacoes WHERE id = ?1', id, 'Gravação');
   const { aprovada } = await lerJson(request);
   if (aprovada && g.status !== 'completo') throw new ErroHttp(422, 'Só gravações completas podem ser aprovadas', 'incompleta');
   await env.DB.prepare('UPDATE gravacoes SET aprovada = ?1, aprovada_por = ?2, aprovada_em = ?3 WHERE id = ?4')
     .bind(aprovada ? 1 : 0, a.email, Date.now(), id)
     .run();
+  auditar(env, ctx, { eventoId: g.evento_id, ator: a.ator, acao: aprovada ? 'audio_aprovado' : 'audio_desaprovado', alvo: g.identificador });
   return json({ ok: true });
 }
 
@@ -961,17 +1005,18 @@ async function novoLink(env, c, criadoPor, dias, origem) {
 }
 
 /* POST /api/admin/coreografias/:id/link  { dias? } */
-export async function criarLinkEntrega(request, env, { id }) {
-  const { a, linha: c } = await exigirRegistroDoEvento(request, env, 'SELECT id, evento_id FROM coreografias WHERE id = ?1', id, 'Coreografia');
+export async function criarLinkEntrega(request, env, { id }, ctx) {
+  const { a, linha: c } = await exigirRegistroDoEvento(request, env, 'SELECT id, evento_id, numero, nome FROM coreografias WHERE id = ?1', id, 'Coreografia');
   const corpo = await lerJson(request).catch(() => ({}));
   const l = await novoLink(env, c, a.email, diasDoLink(corpo), new URL(request.url).origin);
   await env.DB.batch(l.stmts);
+  auditar(env, ctx, { eventoId: c.evento_id, ator: a.ator, acao: 'link_gerado', alvo: `${String(c.numero).padStart(3, '0')} · ${c.nome}` });
   return json({ url: l.url, expira_em: l.expira_em }, 201);
 }
 
 /* POST /api/admin/eventos/:id/links  { dias?, somente_sem_link? }
    Gera o link de todas as coreografias do evento de uma vez (para enviar às escolas/grupos). */
-export async function criarLinksDoEvento(request, env, { id }) {
+export async function criarLinksDoEvento(request, env, { id }, ctx) {
   const a = await exigirEvento(request, env, id);
   await eventoOu404(env, id);
   const corpo = await lerJson(request).catch(() => ({}));
@@ -997,13 +1042,15 @@ export async function criarLinksDoEvento(request, env, { id }) {
     if (stmts.length >= 90) { await env.DB.batch(stmts); stmts = []; }
   }
   if (stmts.length) await env.DB.batch(stmts);
+  auditar(env, ctx, { eventoId: id, ator: a.ator, acao: 'links_gerados', alvo: `${links.length} link(s) · ${dias} dias` });
   return json({ links, dias }, 201);
 }
 
 /* POST /api/admin/coreografias/:id/revogar-links */
-export async function revogarLinks(request, env, { id }) {
-  const { a, linha: c } = await exigirRegistroDoEvento(request, env, 'SELECT evento_id FROM coreografias WHERE id = ?1', id, 'Coreografia');
+export async function revogarLinks(request, env, { id }, ctx) {
+  const { a, linha: c } = await exigirRegistroDoEvento(request, env, 'SELECT evento_id, numero, nome FROM coreografias WHERE id = ?1', id, 'Coreografia');
   const r = await env.DB.prepare('UPDATE links_entrega SET revogado = 1 WHERE coreografia_id = ?1').bind(id).run();
+  if (r.meta.changes) auditar(env, ctx, { eventoId: c.evento_id, ator: a.ator, acao: 'link_desativado', alvo: `${String(c.numero).padStart(3, '0')} · ${c.nome}` });
   return json({ revogados: r.meta.changes });
 }
 

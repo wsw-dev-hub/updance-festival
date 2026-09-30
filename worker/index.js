@@ -99,6 +99,7 @@ const r = new Roteador()
   .rota('POST', '/api/admin/coreografias/:id/revogar-links', admin.revogarLinks)
 
   // ---- ENTREGA AO PARTICIPANTE ----
+  .rota('GET', '/api/admin/auditoria', admin.listarAuditoria)
   .rota('GET', '/ouvir/:token', entrega.paginaEntrega)
   .rota('GET', '/ouvir/:token/:gravacao', entrega.audioEntrega);
 

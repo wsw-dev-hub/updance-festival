@@ -103,6 +103,7 @@
     <button class="tab" data-aba="grupos" role="tab"><i class="mdi mdi-account-group"></i> Grupos <span id="c-grupos" class="contador"></span></button>
     <button class="tab" data-aba="coreografias" role="tab"><i class="mdi mdi-human-female-dance"></i> Coreografias <span id="c-coreografias" class="contador"></span></button>
     <button class="tab" data-aba="conta" role="tab"><i class="mdi mdi-account-cog"></i> Minha conta</button>
+    <button class="tab" data-aba="auditoria" role="tab"><i class="mdi mdi-history"></i> Auditoria</button>
   </nav>
 
   <!-- Player único (Notas, Áudios e Coreografias): fica fixo no topo enquanto a lista rola -->
@@ -267,6 +268,21 @@
       <thead><tr><th>Grupo</th><th>Direção e coordenação</th><th>Contato</th><th>Coreografias</th><th>Ações</th></tr></thead>
       <tbody id="tb-grupos"></tbody>
     </table></div>
+  </section>
+
+
+  <!-- ============================ AUDITORIA ============================ -->
+  <section id="aba-auditoria" class="card aba" hidden>
+    <div class="card-head">
+      <h2>Auditoria</h2>
+      <button id="btn-atualizar-auditoria" class="btn btn-sec" type="button"><i class="mdi mdi-refresh"></i> Atualizar</button>
+    </div>
+    <p id="auditoria-info" class="muted"></p>
+    <div class="tabela-rolagem"><table>
+      <thead><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Sobre</th></tr></thead>
+      <tbody id="tb-auditoria"></tbody>
+    </table></div>
+    <div class="linha"><button id="btn-mais-auditoria" class="btn btn-sec" type="button" hidden><i class="mdi mdi-chevron-down"></i> Carregar mais</button></div>
   </section>
 
   <!-- ============================ CONTA ============================ -->

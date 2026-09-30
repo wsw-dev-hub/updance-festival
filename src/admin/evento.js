@@ -6,12 +6,13 @@
 import {
   $, num, api, aviso, tentar, el, icone, botao, selo, vazio, fmtDuracao, fmtHora, fmtData, paraCampo, comFuso, fmtNota,
   FORMACOES, rotuloFormacao, FAIXAS, rotuloFaixa, situacaoEvento, situacaoConta, copiar, mostrarSenha, ligarCaixaSenha, guardar, ler,
-  trocarMinhaSenha, sair, baixarCsv,
+  trocarMinhaSenha, sair, baixarCsv, painelAuditoria,
 } from './comum.js';
 import { montarZip } from './zip.js';
 
 const CHAVE_ABA = 'udx-festival.evento.aba';
-const ABAS = ['notas', 'ranking', 'gravacoes', 'jurados', 'grupos', 'coreografias', 'conta'];
+const auditoria = painelAuditoria({ tbody: 'tb-auditoria', mais: 'btn-mais-auditoria', info: 'auditoria-info', evento: () => estado.eventoId });
+const ABAS = ['notas', 'ranking', 'gravacoes', 'jurados', 'grupos', 'coreografias', 'conta', 'auditoria'];
 const estado = {
   eu: null,
   eventos: [],
@@ -41,6 +42,8 @@ function trocarAba(nome) {
   for (const b of document.querySelectorAll('[data-aba]')) b.classList.toggle('is-active', b.dataset.aba === nome);
   for (const s of document.querySelectorAll('.aba')) s.hidden = s.id !== `aba-${nome}`;
   if (nome === 'coreografias' && estado.detalhe) renderizarCoreografias();
+  // Auditoria: só consulta o banco na 1ª abertura da aba (depois, em "Atualizar")
+  if (nome === 'auditoria' && estado.eventoId && !auditoria.carregado) tentar(() => auditoria.carregar());
   const carregar = { gravacoes: carregarGravacoes }[nome];
   if (carregar && estado.eventoId) tentar(carregar);
 }
@@ -922,6 +925,8 @@ async function iniciar() {
   $('btn-fechar-player').addEventListener('click', fecharPlayer);
   $('form-coreografia').addEventListener('submit', (e) => tentar(() => salvarCoreografia(e)));
   $('btn-gerar-links').addEventListener('click', () => tentar(gerarLinksDoEvento));
+  $('btn-atualizar-auditoria').addEventListener('click', () => tentar(() => auditoria.carregar()));
+  $('btn-mais-auditoria').addEventListener('click', () => tentar(() => auditoria.carregar(false)));
   $('btn-importar').addEventListener('click', () => tentar(importarCsv));
   $('form-escala').addEventListener('submit', (e) => tentar(() => escalar(e)));
   $('form-grupo').addEventListener('submit', (e) => tentar(() => salvarGrupo(e)));

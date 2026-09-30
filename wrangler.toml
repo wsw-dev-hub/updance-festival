@@ -36,7 +36,7 @@ PBKDF2_ITERACOES = "100000"
 [[d1_databases]]
 binding        = "DB"
 database_name  = "updance-festival_db"
-database_id    = "0f27916e-94e5-471a-a408-3588dc65d845"
+database_id    = "cffc135e-aa51-41da-8f87-1b9f4bcf535d"
 # Sem migrações: o esquema completo está em schema.sql (executar uma vez no Console do D1).
 
 # Áudios (bucket privado — nunca ativar r2.dev). Criar em: R2 Object Storage → Create bucket.

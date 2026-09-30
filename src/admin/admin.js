@@ -5,7 +5,7 @@
 
 import {
   $, api, aviso, tentar, el, icone, botao, selo, vazio, fmtHora, fmtData, situacaoEvento, situacaoConta,
-  copiar, mostrarSenha, ligarCaixaSenha, guardar, ler, trocarMinhaSenha, sair,
+  copiar, mostrarSenha, ligarCaixaSenha, guardar, ler, trocarMinhaSenha, sair, painelAuditoria,
 } from './comum.js';
 
 const CHAVE_SECAO = 'udx-festival.admin.secao';
@@ -16,11 +16,15 @@ const fmtBytes = (b) => (b >= 1073741824 ? `${(b / 1073741824).toLocaleString('p
 
 /* ------------------------------ navegação ------------------------------ */
 
+// Auditoria de contas e acessos: só consulta o banco na 1ª abertura da aba (depois, em "Atualizar")
+const auditoria = painelAuditoria({ tbody: 'tb-auditoria', mais: 'btn-mais-auditoria', info: 'auditoria-info', evento: () => null });
+
 const CARREGAR_SECAO = {
   geral: carregarVisaoGeral,
   admins: carregarAdmins,
   jurados: carregarJurados,
   grupos: carregarGrupos,
+  auditoria: async () => { if (!auditoria.carregado) await auditoria.carregar(); },
   conta: async () => {},
 };
 
@@ -247,6 +251,8 @@ async function excluirGrupo(g) {
 async function iniciar() {
   document.querySelectorAll('[data-secao]').forEach((b) => b.addEventListener('click', () => trocarSecao(b.dataset.secao)));
   $('btn-atualizar').addEventListener('click', () => trocarSecao(estado.secao));
+  $('btn-atualizar-auditoria').addEventListener('click', () => tentar(() => auditoria.carregar()));
+  $('btn-mais-auditoria').addEventListener('click', () => tentar(() => auditoria.carregar(false)));
   $('form-admin').addEventListener('submit', (e) => tentar(() => criarAdmin(e)));
   $('busca-jurados').addEventListener('input', renderizarJurados);
   $('busca-grupos').addEventListener('input', renderizarGrupos);

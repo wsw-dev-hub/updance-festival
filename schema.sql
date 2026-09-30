@@ -7,7 +7,7 @@
 --   • Terminal: npx wrangler d1 execute updance-festival_db --remote --file=schema.sql
 --
 -- Pode ser executado mais de uma vez (tudo usa IF NOT EXISTS; nada é apagado).
--- A última consulta lista as tabelas criadas: devem aparecer 12.
+-- A última consulta lista as tabelas criadas: devem aparecer 13.
 --
 -- Banco criado com a versão ANTERIOR deste arquivo? Execute atualizacao-notas-ranking.sql.
 -- ============================================================================
@@ -183,5 +183,17 @@ CREATE TABLE IF NOT EXISTS links_entrega (
   expira_em       INTEGER NOT NULL,
   revogado        INTEGER NOT NULL DEFAULT 0
 );
+
+-- Auditoria enxuta: só ações da organização e finalizações (sem logins, notas, gravações; sem IP).
+-- Guarda 90 dias (limpeza automática 1x por dia). INTEGER PRIMARY KEY sem AUTOINCREMENT: 1 escrita por linha.
+CREATE TABLE IF NOT EXISTS auditoria (
+  id         INTEGER PRIMARY KEY,
+  evento_id  TEXT,
+  criado_em  INTEGER NOT NULL,
+  ator       TEXT NOT NULL,
+  acao       TEXT NOT NULL,
+  alvo       TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_auditoria_evento ON auditoria(evento_id, id);
 
 SELECT name AS tabela FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name;
