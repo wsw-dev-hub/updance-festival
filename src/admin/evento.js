@@ -634,6 +634,16 @@ function linhaEquipe(rotulo, texto) {
 }
 
 
+/** Lista recolhível de integrantes ("N integrantes" → abre a lista numerada). */
+function listaIntegrantes(texto) {
+  const nomes = nomesDe(texto);
+  if (!nomes.length) return el('div', { class: 'muted sem-integrantes', textContent: 'sem integrantes cadastrados' });
+  return el('details', { class: 'integrantes' },
+    el('summary', { textContent: `${nomes.length} integrante${nomes.length > 1 ? 's' : ''}` }),
+    el('ol', {}, ...nomes.map((n) => el('li', { textContent: n }))),
+  );
+}
+
 function renderizarGrupos() {
   $('tb-grupos').replaceChildren(
     ...(estado.grupos.length
@@ -726,7 +736,7 @@ function renderizarCoreografias() {
           const emUso = c.n_gravacoes || c.n_notas || c.link_expira_em;
           return el('tr', {},
             el('td', {}, el('span', { class: 'num', textContent: num(c.numero) })),
-            el('td', { textContent: c.nome }),
+            el('td', {}, el('div', { textContent: c.nome }), listaIntegrantes(c.integrantes)),
             el('td', { textContent: c.grupo || '—' }),
             el('td', { textContent: c.categoria || '—' }),
             el('td', {}, c.formacao ? rotuloFormacao(c.formacao) : selo('bloqueado', 'definir')),

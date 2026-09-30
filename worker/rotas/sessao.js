@@ -102,6 +102,8 @@ async function memberForgot(request, env, _params, ctx) {
 
   const j = await env.DB.prepare('SELECT id, nome, email FROM jurados WHERE email = ?1 AND ativo = 1').bind(email).first();
   if (!j) {
+    // Registrado para acompanhar pedidos de e-mails sem conta (ou com conta desativada) — nada é enviado
+    auditar(env, ctx, { ator: 'público', acao: 'reset_sem_conta', alvo: email });
     return generica;
   }
   const token = randomToken(32);
@@ -112,13 +114,17 @@ async function memberForgot(request, env, _params, ctx) {
   // O envio segue em segundo plano: o jurado recebe a resposta na hora, mesmo se o Gmail demorar.
   const envio = enviarEmail(env, j.email, 'Redefinir sua senha — UpDance Festival', emailReset(link, j.nome)).then((r) => {
     if (!r.ok) console.error('esqueci a senha: falha ao enviar o e-mail para', j.email, '-', r.error); // Workers → Logs
+    // Auditoria "contas e acessos": resultado de cada envio, com o motivo da falha
+    return auditar(env, null, r.ok
+      ? { ator: `jurado:${j.email}`, acao: 'reset_email_enviado', alvo: r.simulado ? `${j.email} (simulado: dev)` : j.email }
+      : { ator: `jurado:${j.email}`, acao: 'reset_email_falhou', alvo: `${j.email} — ${r.error || 'erro desconhecido'}` });
   });
   if (ctx?.waitUntil) ctx.waitUntil(envio);
   else await envio;
   return generica;
 }
 
-async function memberReset(request, env) {
+async function memberReset(request, env, _params, ctx) {
   const b = await corpo(request);
   const token = typeof b.token === 'string' ? b.token.trim() : '';
   if (!/^[0-9a-f]{64}$/.test(token)) throw new ErroHttp(400, 'Link inválido.', 'token_invalido');
@@ -128,6 +134,7 @@ async function memberReset(request, env) {
   if (!j) throw new ErroHttp(400, 'Link inválido ou já usado.', 'token_invalido');
   if (!j.reset_expira || j.reset_expira < Date.now()) {
     await env.DB.prepare('UPDATE jurados SET reset_hash = NULL, reset_expira = NULL WHERE id = ?1').bind(j.id).run();
+    auditar(env, ctx, { ator: `jurado:${j.email}`, acao: 'reset_link_expirado', alvo: j.email });
     throw new ErroHttp(400, 'Link expirado. Solicite outro.', 'token_expirado');
   }
   const h = await gerarHash(b.password, env);
@@ -137,6 +144,7 @@ async function memberReset(request, env) {
   )
     .bind(h.senha_hash, h.senha_sal, h.senha_iter, j.id)
     .run();
+  auditar(env, ctx, { ator: `jurado:${j.email}`, acao: 'reset_concluido', alvo: j.email });
   return json({ ok: true });
 }
 

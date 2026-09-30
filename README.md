@@ -60,7 +60,7 @@ Na aba **Notas** da tela do evento, cada avaliação finalizada aparece com 🔒
 
 **Grupos:** nome, cidade, responsável, contato, **diretores** e **coordenadores**.
 
-**Coreografias:** além de nº, nome, grupo, categoria, formação e faixa, cada coreografia guarda os seus **integrantes** (bailarinos) e o **coreógrafo(a)/professor(a)**. Um nome por linha (ou separados por `;` / `,`); repetidos são removidos. Se a formação não for informada, ela é deduzida pelo número de integrantes. Na lista de coreografias, a coluna **Áudios dos jurados** mostra só a quantidade de áudios de cada jurado (ex.: "J1 Ana · 2 áudios", "+1 chegando"); ouvir, baixar e o ZIP ficam na aba **Áudios**.
+**Coreografias:** além de nº, nome, grupo, categoria, formação e faixa, cada coreografia guarda os seus **integrantes** (bailarinos) e o **coreógrafo(a)/professor(a)**. Um nome por linha (ou separados por `;` / `,`); repetidos são removidos. Se a formação não for informada, ela é deduzida pelo número de integrantes. Na lista de coreografias, abaixo do nome, os integrantes aparecem num resumo recolhível ("N integrantes", abre a lista ao clicar); a coluna **Áudios dos jurados** mostra só a quantidade de áudios de cada jurado (ex.: "J1 Ana · 2 áudios", "+1 chegando"); ouvir, baixar e o ZIP ficam na aba **Áudios**.
 
 **Áudios dos jurados** (aba **Áudios** da tela do evento):
 - **Ouvir / Pausar** em cada linha, com um player que fica fixo no topo da aba enquanto a lista rola. A barra de avanço funciona, e os áudios ainda chegando tocam o que já foi recebido.
@@ -284,8 +284,8 @@ Não cadastre variáveis de texto (**Text**) pelo painel. As variáveis do `[var
 - **Cookies:** HttpOnly, Secure e SameSite=Lax.
 - **Escritas:** exigem mesma origem mais o cabeçalho `X-UDX-Festival` (proteção CSRF).
 - **Auditoria enxuta** (mesmo princípio do painel do blog no `updance_db`), para não pesar no plano gratuito do D1:
-  - registra só **ações da organização** (eventos, responsáveis, jurados, grupos, coreografias, links, contas, aprovação de áudio, reabertura) e a **finalização de avaliação** pelo jurado;
-  - **não** registra logins, notas, gravações, trechos, pedidos de senha nem acessos aos links — o grosso do tráfego;
+  - registra só **ações da organização** (eventos, responsáveis, jurados, grupos, coreografias, links, contas, aprovação de áudio, reabertura), a **finalização de avaliação** pelo jurado e os **e-mails de nova senha**: e-mail enviado, **falha no envio (com o motivo)**, pedido para e-mail sem conta (nada é enviado), link usado depois de expirar e nova senha criada pelo link — tudo em "Auditoria · contas e acessos" no painel de controle;
+  - **não** registra logins, notas, gravações, trechos nem acessos aos links — o grosso do tráfego;
   - **uma linha por ação** (importar 200 coreografias = 1 linha; gerar 50 links = 1 linha), sem IP e sem JSON;
   - a gravação é feita em segundo plano e nunca atrasa nem derruba a ação;
   - a aba **Auditoria** (última aba da tela do evento; "Auditoria · contas e acessos" no painel de controle) só consulta o banco quando é aberta, 50 linhas por vez ("Carregar mais"), pelo índice `evento_id + id`;

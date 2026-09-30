@@ -195,6 +195,9 @@ const ROTULOS_AUDITORIA = {
   audio_aprovado: 'Áudio aprovado', audio_desaprovado: 'Aprovação de áudio retirada',
   admin_criado: 'Administrador criado', admin_desativado: 'Administrador desativado', admin_reativado: 'Administrador reativado',
   admin_nivel_alterado: 'Nível de administrador alterado', admin_senha_redefinida: 'Senha de administrador redefinida',
+  reset_sem_conta: 'Pedido de nova senha sem conta de jurado (nada enviado)', reset_email_enviado: 'E-mail de nova senha enviado',
+  reset_email_falhou: 'FALHA no envio do e-mail de nova senha', reset_link_expirado: 'Link de nova senha usado depois de expirar',
+  reset_concluido: 'Nova senha criada pelo link do e-mail',
   admin_setup_criado: 'Administrador criado pela chave de setup', admin_setup_redefinido: 'Senha redefinida pela chave de setup',
 };
 
@@ -217,14 +220,14 @@ export function painelAuditoria({ tbody, mais, info, evento }) {
       el('tr', {},
         el('td', { class: 'ident', textContent: fmtHora(l.criado_em) }),
         el('td', { class: 'ident', textContent: l.ator.replace(/^(admin|member|jurado):/, '') }),
-        el('td', { textContent: ROTULOS_AUDITORIA[l.acao] || l.acao }),
+        el('td', {}, l.acao === 'reset_email_falhou' ? selo('bloqueado', ROTULOS_AUDITORIA[l.acao]) : (ROTULOS_AUDITORIA[l.acao] || l.acao)),
         el('td', { textContent: l.alvo || '' }),
       ));
     if (reiniciar) $(tbody).replaceChildren(...(linhas.length ? linhas : [vazio(4, r.sem_tabela ? 'Auditoria ainda não ativada: execute o atualizacao-auditoria-otimizada.sql no Console do D1.' : 'Nenhum registro nos últimos 90 dias.')]));
     else $(tbody).append(...linhas);
     if (r.itens.length) st.cursor = r.itens.at(-1).id;
     $(mais).hidden = !r.mais;
-    $(info).textContent = `Registros dos últimos ${r.retencao_dias || 90} dias · só ações da organização e finalizações de jurados.`;
+    $(info).textContent = `Registros dos últimos ${r.retencao_dias || 90} dias · ${ev ? 'ações da organização e finalizações de jurados deste evento' : 'contas, acessos e e-mails de nova senha (enviados, falhas e pedidos sem conta)'}.`;
   }
   return { carregar, get carregado() { return st.carregado; } };
 }
