@@ -358,7 +358,7 @@ fieldset.bloco-responsaveis p { margin: 0; }
 .bloco-links .check { align-self: center; }
 
 /* Coreografias: quantidade de áudios por jurado */
-.contagem-audios { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; min-width: 190px; }
+.contagem-audios { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; min-width: 110px; }
 .contagem-audios li { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 13px; }
 .contagem-audios .audio-jurado { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .contagem-audios .audio-jurado strong { color: var(--udx-primary-hot); }
