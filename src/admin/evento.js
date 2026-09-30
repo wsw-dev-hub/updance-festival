@@ -736,7 +736,8 @@ function renderizarCoreografias() {
           const emUso = c.n_gravacoes || c.n_notas || c.link_expira_em;
           return el('tr', {},
             el('td', {}, el('span', { class: 'num', textContent: num(c.numero) })),
-            el('td', {}, el('div', { textContent: c.nome }), listaIntegrantes(c.integrantes)),
+            el('td', { textContent: c.nome }),
+            el('td', { class: 'celula-integrantes' }, listaIntegrantes(c.integrantes)),
             el('td', { textContent: c.grupo || '—' }),
             el('td', { textContent: c.categoria || '—' }),
             el('td', {}, c.formacao ? rotuloFormacao(c.formacao) : selo('bloqueado', 'definir')),
@@ -751,7 +752,7 @@ function renderizarCoreografias() {
             ),
           );
         })
-      : [vazio(9, 'Nenhuma coreografia cadastrada.')]),
+      : [vazio(10, 'Nenhuma coreografia cadastrada.')]),
   );
 }
 

@@ -369,3 +369,5 @@ fieldset.bloco-responsaveis p { margin: 0; }
 .contagem-audios .qtd-grupo { display: inline-flex; align-items: baseline; gap: 6px; flex: none; }
 .contagem-audios .qtd-chegando { font-size: 12px; color: var(--udx-primary-orange); }
 .sem-integrantes { font-size: 12px; }
+.celula-integrantes { min-width: 150px; max-width: 240px; vertical-align: top; }
+.celula-integrantes details.integrantes summary { cursor: pointer; white-space: nowrap; }
