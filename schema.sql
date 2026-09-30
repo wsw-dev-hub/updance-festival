@@ -77,8 +77,6 @@ CREATE TABLE IF NOT EXISTS grupos (
   email        TEXT,
   telefone     TEXT,
   criado_em    INTEGER NOT NULL,
-  integrantes    TEXT,
-  coreografo     TEXT,
   diretores      TEXT,
   coordenadores  TEXT,
   evento_id      TEXT REFERENCES eventos(id)
@@ -103,6 +101,8 @@ CREATE TABLE IF NOT EXISTS coreografias (
   categoria  TEXT,
   formacao   TEXT CHECK (formacao IN ('solo', 'duo', 'trio', 'grupo')),
   faixa      TEXT CHECK (faixa IN ('baby', 'infantil', 'juvenil', 'adulto', 'profissional')),
+  integrantes TEXT,  -- bailarinos da coreografia, um por linha
+  coreografo  TEXT,  -- coreógrafo(a)/professor(a), um por linha
   UNIQUE (evento_id, numero)
 );
 CREATE INDEX IF NOT EXISTS idx_coreografias_grupo ON coreografias(grupo_id);

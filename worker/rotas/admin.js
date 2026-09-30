@@ -329,7 +329,8 @@ export function listaDeNomes(v, { maxNomes = 200, maxNome = 120 } = {}) {
   return nomes.length ? nomes.join('\n') : null;
 }
 
-const CAMPOS_EQUIPE = { integrantes: { maxNomes: 200 }, coreografo: { maxNomes: 10 }, diretores: { maxNomes: 20 }, coordenadores: { maxNomes: 20 } };
+// Equipe do grupo/escola (integrantes e coreógrafo ficam em cada coreografia)
+const CAMPOS_EQUIPE = { diretores: { maxNomes: 20 }, coordenadores: { maxNomes: 20 } };
 
 function camposGrupo(b, atual = {}) {
   const pegar = (k, max) => (b[k] !== undefined ? texto(b[k], max, false) || null : atual[k] ?? null);
@@ -352,10 +353,10 @@ export async function criarGrupo(request, env, { id: eventoId }) {
   }
   const id = aleatorio(12);
   await env.DB.prepare(
-    `INSERT INTO grupos (id, nome, nome_chave, cidade, responsavel, email, telefone, criado_em, integrantes, coreografo, diretores, coordenadores, evento_id)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`,
+    `INSERT INTO grupos (id, nome, nome_chave, cidade, responsavel, email, telefone, criado_em, diretores, coordenadores, evento_id)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`,
   )
-    .bind(id, g.nome, chave, g.cidade, g.responsavel, g.email, g.telefone, Date.now(), g.integrantes, g.coreografo, g.diretores, g.coordenadores, eventoId)
+    .bind(id, g.nome, chave, g.cidade, g.responsavel, g.email, g.telefone, Date.now(), g.diretores, g.coordenadores, eventoId)
     .run();
   return json({ id, evento_id: eventoId, ...g }, 201);
 }
@@ -371,9 +372,9 @@ export async function atualizarGrupo(request, env, { id }) {
   if (conflito) throw new ErroHttp(409, 'Já existe um grupo com este nome neste evento', 'grupo_existente');
   await env.DB.prepare(
     `UPDATE grupos SET nome = ?1, nome_chave = ?2, cidade = ?3, responsavel = ?4, email = ?5, telefone = ?6,
-                       integrantes = ?7, coreografo = ?8, diretores = ?9, coordenadores = ?10 WHERE id = ?11`,
+                       diretores = ?7, coordenadores = ?8 WHERE id = ?9`,
   )
-    .bind(g.nome, chave, g.cidade, g.responsavel, g.email, g.telefone, g.integrantes, g.coreografo, g.diretores, g.coordenadores, id)
+    .bind(g.nome, chave, g.cidade, g.responsavel, g.email, g.telefone, g.diretores, g.coordenadores, id)
     .run();
   return json({ id, evento_id: atual.evento_id, ...g });
 }
@@ -520,7 +521,11 @@ export async function detalharEvento(request, env, { id }) {
       `SELECT c.*, g.nome AS grupo,
               (SELECT COUNT(*) FROM gravacoes gr WHERE gr.coreografia_id = c.id) AS n_gravacoes,
               (SELECT COUNT(*) FROM notas n WHERE n.coreografia_id = c.id) AS n_notas,
-              (SELECT MAX(l.expira_em) FROM links_entrega l WHERE l.coreografia_id = c.id AND l.revogado = 0 AND l.expira_em > ?2) AS link_expira_em
+              (SELECT MAX(l.expira_em) FROM links_entrega l WHERE l.coreografia_id = c.id AND l.revogado = 0 AND l.expira_em > ?2) AS link_expira_em,
+              (SELECT json_group_object(jurado_id, n) FROM (SELECT jurado_id, COUNT(*) AS n FROM gravacoes gr
+                  WHERE gr.coreografia_id = c.id AND gr.status = 'completo' GROUP BY jurado_id)) AS audios_por_jurado,
+              (SELECT json_group_object(jurado_id, n) FROM (SELECT jurado_id, COUNT(*) AS n FROM gravacoes gr
+                  WHERE gr.coreografia_id = c.id AND gr.status <> 'completo' GROUP BY jurado_id)) AS chegando_por_jurado
          FROM coreografias c LEFT JOIN grupos g ON g.id = c.grupo_id
         WHERE c.evento_id = ?1 ORDER BY c.numero`,
     ).bind(id, Date.now()),
@@ -535,9 +540,10 @@ export async function detalharEvento(request, env, { id }) {
         WHERE er.evento_id = ?1 ORDER BY a.nome`,
     ).bind(id),
   ]);
+  const mapa = (v) => { try { return JSON.parse(v || '{}'); } catch { return {}; } };
   return json({
     evento,
-    coreografias: coreografias.results,
+    coreografias: coreografias.results.map((c) => ({ ...c, audios_por_jurado: mapa(c.audios_por_jurado), chegando_por_jurado: mapa(c.chegando_por_jurado) })),
     jurados: jurados.results,
     responsaveis: responsaveis.results,
     link_jurados: `${new URL(request.url).origin}/?evento=${id}`,
@@ -678,13 +684,35 @@ export function lerCsv(conteudo) {
   });
 }
 
-const sqlUpsertCoreografia = `INSERT INTO coreografias (id, evento_id, numero, nome, grupo_id, categoria, formacao, faixa)
-  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+// Formulário: grava tudo o que veio (inclusive apagar integrantes/coreógrafo).
+const sqlUpsertCoreografia = `INSERT INTO coreografias (id, evento_id, numero, nome, grupo_id, categoria, formacao, faixa, integrantes, coreografo)
+  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
   ON CONFLICT (evento_id, numero) DO UPDATE SET nome = excluded.nome, grupo_id = excluded.grupo_id, categoria = excluded.categoria,
-                                               formacao = excluded.formacao, faixa = excluded.faixa`;
+                                               formacao = excluded.formacao, faixa = excluded.faixa,
+                                               integrantes = excluded.integrantes, coreografo = excluded.coreografo`;
+// CSV: célula vazia de integrantes/coreógrafo não apaga o que já estava cadastrado.
+const sqlUpsertCoreografiaCsv = sqlUpsertCoreografia
+  .replace('integrantes = excluded.integrantes', 'integrantes = COALESCE(excluded.integrantes, coreografias.integrantes)')
+  .replace('coreografo = excluded.coreografo', 'coreografo = COALESCE(excluded.coreografo, coreografias.coreografo)');
+
+/**
+ * Integrantes e coreógrafo(a) da coreografia. "integrantes" pode ser a lista de nomes (um por linha, ou separados
+ * por "," / ";") ou só o número de bailarinos (formato antigo do CSV). A contagem ajuda a deduzir a formação.
+ */
+function equipeDaCoreografia(integrantes, coreografo) {
+  const bruto = Array.isArray(integrantes) ? integrantes : String(integrantes ?? '').trim();
+  const soNumero = typeof bruto === 'string' && /^\d+$/.test(bruto);
+  const nomes = soNumero ? null : listaDeNomes(bruto === '' ? null : bruto, { maxNomes: 200 });
+  return {
+    integrantes: nomes,
+    coreografo: listaDeNomes(coreografo == null || coreografo === '' ? null : coreografo, { maxNomes: 10 }),
+    qtd: soNumero ? Number(bruto) : nomes ? nomes.split('\n').length : null,
+  };
+}
 
 /* POST /api/admin/eventos/:id/coreografias
-   - text/csv: numero;nome;grupo;categoria;formacao;faixa  (ou "integrantes" no lugar de formacao; grupos inexistentes são criados)
+   - text/csv: numero;nome;grupo;categoria;formacao;faixa;integrantes;coreografo
+     (integrantes: nomes separados por vírgula — ou só o número de bailarinos; sem formação, ela sai da contagem)
    - JSON: { numero, nome, grupo_id?, categoria?, formacao?, faixa? } (uma coreografia; mesmo número = atualiza) */
 export async function adicionarCoreografias(request, env, { id }) {
   const a = await exigirEvento(request, env, id);
@@ -699,9 +727,12 @@ export async function adicionarCoreografias(request, env, { id }) {
     const grupoId = b.grupo_id
       ? (await umOu404(env, 'SELECT id FROM grupos WHERE id = ?1 AND evento_id = ?2', [String(b.grupo_id), id], 'Grupo do evento')).id
       : null;
-    const formacao = formacaoDe(b.formacao, b.integrantes);
+    const eq = equipeDaCoreografia(b.integrantes, b.coreografo);
+    const formacao = formacaoDe(b.formacao, eq.qtd);
     const faixa = faixaDe(b.faixa);
-    await env.DB.prepare(sqlUpsertCoreografia).bind(aleatorio(12), id, numero, nome, grupoId, texto(b.categoria, 100, false) || null, formacao, faixa).run();
+    await env.DB.prepare(sqlUpsertCoreografia)
+      .bind(aleatorio(12), id, numero, nome, grupoId, texto(b.categoria, 100, false) || null, formacao, faixa, eq.integrantes, eq.coreografo)
+      .run();
     return json({ ok: true }, 201);
   }
 
@@ -717,12 +748,20 @@ export async function adicionarCoreografias(request, env, { id }) {
       return null;
     }
   });
+  const equipes = linhas.map((l, i) => {
+    try {
+      return equipeDaCoreografia(l.integrantes ?? l.bailarinos, l.coreografo || l.coreografa || l.professor || l.professora);
+    } catch (e) {
+      erros.push(`linha ${i + 2}: ${e.message}`);
+      return { integrantes: null, coreografo: null, qtd: null };
+    }
+  });
   const formacoes = linhas.map((l, i) => {
     const numero = Number.parseInt(l.numero, 10);
     const nome = (l.nome || l.coreografia || '').trim();
     if (!Number.isFinite(numero) || numero < 0 || !nome || nome.length > 200) erros.push(`linha ${i + 2}: número ou nome inválido`);
     try {
-      return formacaoDe(l.formacao || l.modalidade_formacao, l.integrantes || l.bailarinos);
+      return formacaoDe(l.formacao || l.modalidade_formacao, equipes[i].qtd);
     } catch (e) {
       erros.push(`linha ${i + 2}: ${e.message}`);
       return null;
@@ -735,8 +774,8 @@ export async function adicionarCoreografias(request, env, { id }) {
   for (const [i, l] of linhas.entries()) {
     const grupoId = await grupoPorNome(env, id, l.grupo || l.escola || l.companhia, cache);
     stmts.push(
-      env.DB.prepare(sqlUpsertCoreografia).bind(aleatorio(12), id, Number.parseInt(l.numero, 10), (l.nome || l.coreografia || '').trim(),
-        grupoId, (l.categoria || '').slice(0, 100) || null, formacoes[i], faixas[i]),
+      env.DB.prepare(sqlUpsertCoreografiaCsv).bind(aleatorio(12), id, Number.parseInt(l.numero, 10), (l.nome || l.coreografia || '').trim(),
+        grupoId, (l.categoria || '').slice(0, 100) || null, formacoes[i], faixas[i], equipes[i].integrantes, equipes[i].coreografo),
     );
   }
   await env.DB.batch(stmts);

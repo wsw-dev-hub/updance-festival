@@ -195,13 +195,17 @@
         <select name="formacao"><option value="">Escolha…</option><option value="solo">Solo</option><option value="duo">Duo</option><option value="trio">Trio</option><option value="grupo">Grupo</option></select></label>
       <label>Faixa
         <select name="faixa"><option value="">Escolha…</option><option value="baby">Baby</option><option value="infantil">Infantil</option><option value="juvenil">Juvenil</option><option value="adulto">Adulto</option><option value="profissional">Profissional</option></select></label>
+      <label class="campo-largo">Integrantes <span class="dica">um nome por linha</span>
+        <textarea name="integrantes" rows="4" maxlength="24000" placeholder="Ana Lima&#10;Bruno Souza&#10;Carla Mendes"></textarea></label>
+      <label class="campo-meio">Coreógrafo(a) / professor(a) <span class="dica">um por linha</span>
+        <textarea name="coreografo" rows="2" maxlength="1300"></textarea></label>
       <button type="submit" class="btn btn-hot"><i class="mdi mdi-content-save-outline"></i> Salvar</button>
     </form>
     <p class="muted">Mesmo número = atualiza a coreografia existente.</p>
     <details>
       <summary><i class="mdi mdi-file-upload-outline"></i> Importar CSV</summary>
-      <p class="muted">Colunas: <code>numero;nome;grupo;categoria;formacao;faixa</code> (formação: solo, duo, trio ou grupo — ou use a coluna <code>integrantes</code> com o número de bailarinos; faixa: baby, infantil, juvenil, adulto ou profissional). Grupos que ainda não existem são criados.</p>
-      <textarea id="csv" rows="5" placeholder="numero;nome;grupo;categoria;formacao;faixa&#10;1;Bolero de Ravel;Cia. Movimento;Contemporâneo;grupo;adulto&#10;2;Solo em Vermelho;Ana Lima;Jazz;solo;juvenil"></textarea>
+      <p class="muted">Colunas: <code>numero;nome;grupo;categoria;formacao;faixa;integrantes;coreografo</code> (formação: solo, duo, trio ou grupo; faixa: baby, infantil, juvenil, adulto ou profissional; integrantes e coreógrafo: nomes separados por vírgula — sem a formação, ela é deduzida pelo número de integrantes). Grupos que ainda não existem são criados.</p>
+      <textarea id="csv" rows="5" placeholder="numero;nome;grupo;categoria;formacao;faixa;integrantes;coreografo&#10;1;Bolero de Ravel;Cia. Movimento;Contemporâneo;grupo;adulto;Ana Lima, Bruno Souza, Carla Mendes, Davi Rocha;Prof. Marcos&#10;2;Solo em Vermelho;Cia. Movimento;Jazz;solo;juvenil;Ana Lima;Prof. Marcos"></textarea>
       <div class="linha">
         <input id="arquivo-csv" type="file" accept=".csv,text/csv">
         <button id="btn-importar" class="btn btn-hot" type="button">Importar</button>
@@ -250,10 +254,6 @@
       <label>Responsável pelo grupo <input name="responsavel" maxlength="120"></label>
       <label>E-mail <input name="email" type="email" maxlength="254"></label>
       <label>Telefone <input name="telefone" maxlength="40"></label>
-      <label class="campo-largo">Integrantes <span class="dica">um nome por linha</span>
-        <textarea name="integrantes" rows="4" maxlength="24000" placeholder="Ana Lima&#10;Bruno Souza&#10;Carla Mendes"></textarea></label>
-      <label class="campo-meio">Coreógrafo(a) / professor(a) <span class="dica">um por linha</span>
-        <textarea name="coreografo" rows="2" maxlength="1300"></textarea></label>
       <label class="campo-meio">Diretores <span class="dica">um por linha</span>
         <textarea name="diretores" rows="2" maxlength="2500"></textarea></label>
       <label class="campo-meio">Coordenadores <span class="dica">um por linha</span>
@@ -264,7 +264,7 @@
       </div>
     </form>
     <div class="tabela-rolagem"><table>
-      <thead><tr><th>Grupo</th><th>Equipe</th><th>Integrantes</th><th>Contato</th><th>Coreografias</th><th>Ações</th></tr></thead>
+      <thead><tr><th>Grupo</th><th>Direção e coordenação</th><th>Contato</th><th>Coreografias</th><th>Ações</th></tr></thead>
       <tbody id="tb-grupos"></tbody>
     </table></div>
   </section>

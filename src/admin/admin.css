@@ -356,3 +356,15 @@ fieldset.bloco-responsaveis p { margin: 0; }
 .bloco-links { margin-top: 10px; }
 .bloco-links > .linha { align-items: end; flex-wrap: wrap; gap: 10px; }
 .bloco-links .check { align-self: center; }
+
+/* Coreografias: quantidade de áudios por jurado */
+.contagem-audios { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; min-width: 190px; }
+.contagem-audios li { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 13px; }
+.contagem-audios .audio-jurado { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contagem-audios .audio-jurado strong { color: var(--udx-primary-hot); }
+.qtd-audios { flex: none; font-family: var(--udx-font-mono, 'DM Mono', monospace); font-size: 12px; padding: 1px 8px; border-radius: 999px;
+  border: 1px dashed var(--line); color: var(--muted); }
+.qtd-audios.tem { border-style: solid; border-color: var(--udx-ok); color: var(--udx-ok); background: color-mix(in srgb, var(--udx-ok) 12%, transparent); }
+.contagem-audios li.sem-audio .audio-jurado { opacity: .7; }
+.contagem-audios .qtd-grupo { display: inline-flex; align-items: baseline; gap: 6px; flex: none; }
+.contagem-audios .qtd-chegando { font-size: 12px; color: var(--udx-primary-orange); }

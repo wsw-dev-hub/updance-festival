@@ -58,13 +58,9 @@ Na aba **Notas** da tela do evento, cada avaliação finalizada aparece com 🔒
   - **Com filtros:** pódio, posições e tabela são recalculados só entre as coreografias selecionadas (ex.: "Pódio · Solos · Adulto"). O botão **Limpar filtros** volta ao ranking geral.
   - Médias iguais dividem a posição. "Parcial" indica que ainda faltam notas. O CSV exportado segue os filtros (ex.: `ranking_<data>_geral.csv`, `ranking_<data>_solos_adulto.csv`).
 
-**Grupos:** além de nome, cidade, responsável e contato, o cadastro guarda a equipe:
-- **integrantes**;
-- **coreógrafo(a)/professor(a)**;
-- **diretores**;
-- **coordenadores**.
+**Grupos:** nome, cidade, responsável, contato, **diretores** e **coordenadores**.
 
-Em cada campo vai um nome por linha. Também dá para separar os nomes com `;` ou `,`, e os repetidos são removidos. A lista de grupos mostra a equipe, e os integrantes aparecem num resumo que abre ao clicar.
+**Coreografias:** além de nº, nome, grupo, categoria, formação e faixa, cada coreografia guarda os seus **integrantes** (bailarinos) e o **coreógrafo(a)/professor(a)**. Um nome por linha (ou separados por `;` / `,`); repetidos são removidos. Se a formação não for informada, ela é deduzida pelo número de integrantes. Na lista de coreografias, a coluna **Áudios dos jurados** mostra só a quantidade de áudios de cada jurado (ex.: "J1 Ana · 2 áudios", "+1 chegando"); ouvir, baixar e o ZIP ficam na aba **Áudios**.
 
 **Áudios dos jurados** (aba **Áudios** da tela do evento):
 - **Ouvir / Pausar** em cada linha, com um player que fica fixo no topo da aba enquanto a lista rola. A barra de avanço funciona, e os áudios ainda chegando tocam o que já foi recebido.
@@ -83,7 +79,8 @@ Em cada campo vai um nome por linha. Também dá para separar os nomes com `;` o
 **Formação da coreografia** (segmenta o ranking):
 - `solo`, `duo`, `trio` ou `grupo`, informada no cadastro ou no CSV (coluna `formacao`).
 - Aceita sinônimos: "Solo feminino", "dupla", "conjunto"…
-- Em vez da formação, o CSV pode trazer a coluna `integrantes` com o número de bailarinos: 1 = solo, 2 = duo, 3 = trio, 4 ou mais = grupo.
+- Sem a coluna `formacao`, ela sai da coluna `integrantes`: a lista de nomes (separados por vírgula) ou só o número de bailarinos. 1 = solo, 2 = duo, 3 = trio, 4 ou mais = grupo.
+- CSV completo: `numero;nome;grupo;categoria;formacao;faixa;integrantes;coreografo`. Reimportar um CSV sem as colunas de integrantes/coreógrafo não apaga o que já estava cadastrado.
 
 ```
 GitHub ──► Cloudflare (Workers Builds)
@@ -170,8 +167,9 @@ O resultado deve ter **12 tabelas**: `admins, coreografias, evento_jurados, even
 > 3. **`atualizacao-faixa-coreografias.sql`**: acrescenta a coluna `faixa` às coreografias (as existentes ficam "sem faixa" até alguém definir).
 > 4. **`atualizacao-finalizacao.sql`**: cria a tabela `finalizacoes` (botão "Finalizar avaliação" do jurado).
 > 5. **`atualizacao-remover-auditoria.sql`**: apaga a tabela `auditoria` (o sistema não grava mais esse histórico) e libera o espaço no D1.
+> 6. **`atualizacao-integrantes-coreografias.sql`**: cria `integrantes` e `coreografo` nas coreografias e copia para cada uma o que estava no cadastro do grupo dela (confira e ajuste na aba Coreografias).
 >
-> Resumo da ordem para um banco antigo: `atualizacao-notas-ranking.sql` → `atualizacao-grupos-equipe.sql` → `atualizacao-grupos-por-evento.sql` → `atualizacao-faixa-coreografias.sql` → `atualizacao-finalizacao.sql` → `atualizacao-remover-auditoria.sql`. Pule os que já executou. Banco criado com o `schema.sql` desta versão já tem tudo e não precisa de nenhum arquivo de atualização.
+> Resumo da ordem para um banco antigo: `atualizacao-notas-ranking.sql` → `atualizacao-grupos-equipe.sql` → `atualizacao-grupos-por-evento.sql` → `atualizacao-faixa-coreografias.sql` → `atualizacao-finalizacao.sql` → `atualizacao-remover-auditoria.sql` → `atualizacao-integrantes-coreografias.sql`. Pule os que já executou. Banco criado com o `schema.sql` desta versão já tem tudo e não precisa de nenhum arquivo de atualização.
 
 > **Se o banco já tinha tabelas de uma versão anterior deste projeto,** confira com a consulta abaixo:
 >
@@ -236,8 +234,8 @@ Não cadastre variáveis de texto (**Text**) pelo painel. As variáveis do `[var
    - As contas novas aparecem num quadro com o endereço `/admin-login/` e a senha provisória de cada uma (**Copiar tudo**). Elas aparecem uma única vez.
 5. Envie a cada responsável esse endereço, o e-mail e a senha provisória. No 1º acesso, ele cria a própria senha e cai na tela **Eventos e responsáveis**, só com os eventos dele.
 6. O responsável (ou você) clica em **Abrir tela do evento** e faz, nesta ordem:
-   1. **Grupos:** cadastra cada grupo/escola com cidade, contato, integrantes, coreógrafo(a)/professor(a), diretores e coordenadores. (Grupos que faltarem também são criados pelo CSV do passo seguinte.)
-   2. **Coreografias:** importa o CSV `numero;nome;grupo;categoria;formacao;faixa` ou cadastra uma a uma.
+   1. **Grupos:** cadastra cada grupo/escola com cidade, contato, diretores e coordenadores. (Grupos que faltarem também são criados pelo CSV do passo seguinte.)
+   2. **Coreografias:** importa o CSV `numero;nome;grupo;categoria;formacao;faixa;integrantes;coreografo` ou cadastra uma a uma (com integrantes e coreógrafo).
    3. **Jurados:** informa nome, e-mail e telefone de cada um. Quem não tem conta recebe uma senha provisória, que aparece uma única vez.
 7. Envie a cada jurado o **link do app** (botão **Link dos jurados**) e a senha provisória. No 1º acesso, ele cria a própria senha.
 8. Durante o evento, a aba **Notas** atualiza sozinha a cada 15 s. O **Ranking** mostra o pódio de cada formação e exporta CSV.
@@ -326,5 +324,6 @@ atualizacao-grupos-por-evento.sql   bancos criados antes dos grupos por evento (
 atualizacao-faixa-coreografias.sql  bancos criados antes da faixa das coreografias (executar 4º)
 atualizacao-finalizacao.sql         bancos criados antes do botão Finalizar (executar 5º)
 atualizacao-remover-auditoria.sql   apaga a tabela de auditoria antiga (executar 6º)
+atualizacao-integrantes-coreografias.sql  integrantes/coreógrafo passam do grupo para a coreografia (executar 7º)
 vite.config.js · wrangler.toml · package.json
 ```

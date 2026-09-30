@@ -204,14 +204,6 @@ function linhaEquipe(rotulo, texto) {
   return nomes.length ? el('div', {}, el('span', { class: 'rotulo-equipe', textContent: `${rotulo}: ` }), nomes.join(', ')) : null;
 }
 
-function listaIntegrantes(texto) {
-  const nomes = nomesDe(texto);
-  if (!nomes.length) return el('span', { class: 'muted', textContent: '—' });
-  return el('details', { class: 'integrantes' },
-    el('summary', { textContent: `${nomes.length} integrante${nomes.length > 1 ? 's' : ''}` }),
-    el('ol', {}, ...nomes.map((n) => el('li', { textContent: n }))),
-  );
-}
 
 async function carregarGrupos() {
   estado.grupos = await api('GET', '/api/admin/grupos');
@@ -229,10 +221,9 @@ function renderizarGrupos() {
             el('td', {}, el('strong', { textContent: g.nome }), el('div', { class: 'muted', textContent: [g.cidade, g.responsavel && `Resp.: ${g.responsavel}`].filter(Boolean).join(' · ') })),
             el('td', {}, g.evento_id ? el('a', { class: 'link-udx', href: urlEvento(g.evento_id), textContent: g.evento }) : selo('bloqueado', 'sem evento')),
             el('td', { class: 'equipe' },
-              linhaEquipe('Coreógrafo(a)/prof.', g.coreografo), linhaEquipe('Direção', g.diretores), linhaEquipe('Coordenação', g.coordenadores),
-              !g.coreografo && !g.diretores && !g.coordenadores ? el('span', { class: 'muted', textContent: '—' }) : null,
+              linhaEquipe('Direção', g.diretores), linhaEquipe('Coordenação', g.coordenadores),
+              !g.diretores && !g.coordenadores ? el('span', { class: 'muted', textContent: '—' }) : null,
             ),
-            el('td', {}, listaIntegrantes(g.integrantes)),
             el('td', { textContent: g.coreografias }),
             el('td', { class: 'acoes' },
               !g.evento_id && !g.coreografias ? botao('Excluir', 'delete-outline', () => excluirGrupo(g), 'btn btn-sec btn-perigo') : null,
@@ -240,7 +231,7 @@ function renderizarGrupos() {
             ),
           ),
         )
-      : [vazio(6, estado.grupos.length ? 'Nenhum grupo com essa busca.' : 'Nenhum grupo cadastrado ainda.')]),
+      : [vazio(5, estado.grupos.length ? 'Nenhum grupo com essa busca.' : 'Nenhum grupo cadastrado ainda.')]),
   );
 }
 
